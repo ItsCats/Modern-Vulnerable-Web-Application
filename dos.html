@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulated DoS - Modern Vulnerable Web Application</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="vulnerability-style.css">
+</head>
+<body>
+    <header>
+        <h1><a href="index.html" class="site-title">Modern <span class="neon-accent">Vulnerable</span> Web <span class="glitch">App</span></a></h1>
+        <nav>
+            <ul>
+                <li><a href="sql-injection.html">SQL Injection</a></li>
+                <li><a href="xss.html">XSS</a></li>
+                <li><a href="csrf.html">CSRF</a></li>
+                <li><a href="idor.html">IDOR</a></li>
+                <li><a href="path-traversal.html">Path Traversal</a></li>
+                <li><a href="command-injection.html">Command Injection</a></li>
+                <li><a href="about.html">About</a></li>
+                <li><a href="dos.html" class="current-page">Simulated DoS</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="vulnerability-content">
+        <section class="vulnerability-explanation">
+            <h2>Simulated Denial of Service (DoS)</h2>
+            <p>A Denial of Service (DoS) attack aims to make a web application unavailable. While we can't perform a real DoS attack from this front-end, we can simulate its effects by consuming browser resources. Below, you can simulate sending "packets" to a server. Sending too many might lead to a simulated "crash" (unresponsiveness).</p>
+        </section>
+
+        <section class="dos-simulation">
+            <h3>Simulate Packet Sending</h3>
+            <div class="form-group">
+                <label for="packet-count">Number of Packets to Send (Simulated):</label>
+                <input type="number" id="packet-count" name="packet-count" value="100" min="1" step="100">
+            </div>
+            <button id="send-packets-button" class="button">Send Packets</button>
+            <div id="dos-results" class="results-area">
+            </div>
+        </section>
+    </main>
+
+    <script>
+        document.getElementById('send-packets-button').addEventListener('click', function() {
+            const packetCount = parseInt(document.getElementById('packet-count').value);
+            if (isNaN(packetCount) || packetCount < 1) {
+                document.getElementById('dos-results').innerHTML = '<p class="error">Please enter a valid number of packets.</p>';
+                return;
+            }
+
+            document.getElementById('dos-results').innerHTML = `<p class="loading">Simulating sending ${packetCount} packets... This might cause unresponsiveness if the number is too high.</p>`;
+            simulatePacketFlood(packetCount);
+        });
+
+        function simulatePacketFlood(count) {
+            let startTime = performance.now();
+            let i = 0;
+            while (i < count && (performance.now() - startTime < 10000)) { // Limit to 10 seconds to prevent indefinite freeze
+                // Simulate processing a packet with a small delay
+                let result = Math.sin(i) * Math.cos(i);
+                i++;
+            }
+
+            if (i === count) {
+                document.getElementById('dos-results').innerHTML = `<p class="success">Simulated sending of ${count} packets complete. Did you notice any slowdown?</p>`;
+            } else {
+                document.getElementById('dos-results').innerHTML = `<p class="error">Simulated server overloaded after ${i} packets. The page might be unresponsive.</p>`;
+                // At this point, the browser might indeed be slow due to the loop
+            }
+        }
+    </script>
+</body>
+</html>

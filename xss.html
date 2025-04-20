@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XSS - Modern Vulnerable Web Application</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="vulnerability-style.css">
+</head>
+<body>
+    <header>
+        <h1><a href="index.html" class="site-title">Modern <span class="neon-accent">Vulnerable</span> Web <span class="glitch">App</span></a></h1>
+        <nav>
+            <ul>
+                <li><a href="sql-injection.html">SQL Injection</a></li>
+                <li><a href="xss.html" class="current-page">XSS</a></li>
+                <li><a href="csrf.html">CSRF</a></li>
+                <li><a href="idor.html">IDOR</a></li>
+                <li><a href="path-traversal.html">Path Traversal</a></li>
+                <li><a href="command-injection.html">Command Injection</a></li>
+                <li><a href="about.html">About</a></li>
+                <li><a href="dos.html">Simulated DoS</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="vulnerability-content">
+        <section class="vulnerability-explanation">
+            <h2>Cross-Site Scripting (XSS)</h2>
+            <p>Cross-Site Scripting (XSS) is a web security vulnerability that allows an attacker to inject malicious scripts into web pages viewed by other users. This can happen when user-provided data is displayed on a web page without proper sanitization or encoding.</p>
+            <p>Below is a simple input field. Whatever you type will be displayed on the page. Try entering some text, and then try entering a JavaScript snippet.</p>
+        </section>
+
+        <section class="xss-playground">
+            <h3>Enter Some Text</h3>
+            <form id="xss-input-form">
+                <div class="form-group">
+                    <label for="xss-input">Text to Display:</label>
+                    <input type="text" id="xss-input" name="xss-input">
+                </div>
+                <button type="submit" class="button">Display</button>
+            </form>
+            <div id="xss-output" class="results-area">
+                </div>
+        </section>
+
+        <section class="potential-attacks">
+            <h3>Try These Attacks (Educational Purposes Only)</h3>
+            <ul>
+                <li><code>&lt;script&gt;alert('XSS!')&lt;/script&gt;</code> (Basic alert)</li>
+                <li><code>&lt;img src="onerror=alert('XSS')"&gt;</code> (Using an image tag)</li>
+                <li><code>&lt;a href="javascript:alert('XSS')">Click Me&lt;/a&gt;</code> (In an anchor tag)</li>
+            </ul>
+            <p class="warning">Be cautious when experimenting with these techniques on real websites.</p>
+        </section>
+    </main>
+    
+
+    <script>
+        document.getElementById('xss-input-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const userInput = document.getElementById('xss-input').value;
+            const outputDiv = document.getElementById('xss-output');
+            outputDiv.innerHTML = userInput; // Intentionally vulnerable
+        });
+    </script>
+</body>
+</html>

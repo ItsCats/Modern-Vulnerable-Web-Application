@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Injection - Modern Vulnerable Web Application</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="vulnerability-style.css">
+</head>
+<body>
+    <header>
+        <h1><a href="index.html" class="site-title">Modern <span class="neon-accent">Vulnerable</span> Web <span class="glitch">App</span></a></h1>
+        <nav>
+            <ul>
+                <li><a href="sql-injection.html" class="current-page">SQL Injection</a></li>
+                <li><a href="xss.html">XSS</a></li>
+                <li><a href="csrf.html">CSRF</a></li>
+                <li><a href="idor.html">IDOR</a></li>
+                <li><a href="path-traversal.html">Path Traversal</a></li>
+                <li><a href="command-injection.html">Command Injection</a></li>
+                <li><a href="about.html">About</a></li>
+                <li><a href="dos.html">Simulated DoS</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="vulnerability-content">
+        <section class="vulnerability-explanation">
+            <h2>SQL Injection</h2>
+            <p>SQL Injection (SQLi) is a common web security vulnerability that allows an attacker to interfere with the queries that an application makes to its database. By crafting malicious SQL statements, an attacker can bypass security measures, gain unauthorized access to sensitive data, modify or delete data, or even execute arbitrary commands on the database server.</p>
+            <p>Below is a simple form that is intentionally vulnerable to SQL injection. Try entering different usernames to see the results.</p>
+        </section>
+
+        <section class="vulnerable-form">
+            <h3>Find User</h3>
+            <form id="user-search">
+                <div class="form-group">
+                    <label for="username">Username:</label>
+                    <input type="text" id="username" name="username">
+                </div>
+                <button type="submit" class="button">Search</button>
+            </form>
+            <div id="search-results" class="results-area">
+                </div>
+        </section>
+
+        <section class="potential-attacks">
+            <h3>Try These Attacks (Educational Purposes Only)</h3>
+            <ul>
+                <li><code>' OR '1'='1</code> (Bypass login or retrieve all users)</li>
+                <li><code>'; DROP TABLE users; --</code> (Potentially drop the users table)</li>
+                <li><code>' UNION SELECT null, version(), null --</code> (Retrieve database version)</li>
+            </ul>
+            <p class="warning">Be cautious when experimenting with these techniques on real websites as they can cause serious damage.</p>
+        </section>
+    </main>
+
+  
+
+    <script>
+        document.getElementById('user-search').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const username = document.getElementById('username').value;
+            const resultsDiv = document.getElementById('search-results');
+            resultsDiv.innerHTML = '<p class="loading">Searching...</p>';
+
+            // Simulate a vulnerable database query on the front-end
+            setTimeout(() => {
+                let query = `SELECT * FROM users WHERE username = '${username}'`;
+                let results = simulateDatabase(query, username); // Pass the raw username
+                displayResults(results, resultsDiv);
+            }, 1000);
+        });
+
+        function simulateDatabase(query, rawUsername) {
+            const users = [
+                { id: 1, username: 'alice', email: 'alice@example.com', secret: 'secure123' },
+                { id: 2, username: 'bob', email: 'bob@example.com', secret: 'password456' },
+                { id: 3, username: 'charlie', email: 'charlie@example.com', secret: 'topsecret789' }
+            ];
+
+            const lowerCaseQuery = query.toLowerCase();
+
+            if (lowerCaseQuery.includes('drop table')) {
+                return [{ message: 'Error: Database operation blocked (simulated)' }];
+            } else if (lowerCaseQuery.includes('union select')) {
+                const version = 'Simulated Database v1.0';
+                return [{ version: version }];
+            } else if (rawUsername.toLowerCase().includes("' or 1=1")) { // More flexible check
+                return users;
+            } else {
+                const searchTerm = rawUsername.replace(/'/g, ''); // Basic sanitization for normal search
+                return users.filter(user => user.username === searchTerm);
+            }
+        }
+
+        function displayResults(results, resultsDiv) {
+            resultsDiv.innerHTML = '';
+            if (results && results.length > 0) {
+                const ul = document.createElement('ul');
+                results.forEach(result => {
+                    const li = document.createElement('li');
+                    let details = '';
+                    for (const key in result) {
+                        details += `<strong>${key}:</strong> ${result[key]}, `;
+                    }
+                    li.textContent = details.slice(0, -2); // Remove trailing comma and space
+                    ul.appendChild(li);
+                });
+                resultsDiv.appendChild(ul);
+            } else if (results && results.length === 0) {
+                resultsDiv.innerHTML = '<p>No users found.</p>';
+            } else if (results && results[0].message) {
+                resultsDiv.innerHTML = `<p class="error">${results[0].message}</p>`;
+            } else if (results && results[0].version) {
+                resultsDiv.innerHTML = `<p>Database Version: ${results[0].version}</p>`;
+            } else {
+                resultsDiv.innerHTML = '<p>An error occurred.</p>';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Command Injection - Modern Vulnerable Web Application</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="vulnerability-style.css">
+</head>
+<body>
+    <header>
+        <h1><a href="index.html" class="site-title">Modern <span class="neon-accent">Vulnerable</span> Web <span class="glitch">App</span></a></h1>
+        <nav>
+            <ul>
+                <li><a href="sql-injection.html">SQL Injection</a></li>
+                <li><a href="xss.html">XSS</a></li>
+                <li><a href="csrf.html">CSRF</a></li>
+                <li><a href="idor.html">IDOR</a></li>
+                <li><a href="path-traversal.html">Path Traversal</a></li>
+                <li><a href="command-injection.html" class="current-page">Command Injection</a></li>
+                <li><a href="about.html">About</a></li>
+                <li><a href="dos.html">Simulated DoS</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="vulnerability-content">
+        <section class="vulnerability-explanation">
+            <h2>Command Injection</h2>
+            <p>Command Injection is a web security vulnerability that allows an attacker to execute arbitrary operating system commands on the server that is running an application. This can occur when the application passes unsanitized user-supplied input to system commands.</p>
+            <p>Below, you can enter a domain to look up its IP address information (simulated). Try entering a domain, and then try injecting operating system commands.</p>
+        </section>
+
+        <section class="ip-lookup">
+            <h3>IP Address Lookup</h3>
+            <form id="lookup-form">
+                <div class="form-group">
+                    <label for="domain">Domain:</label>
+                    <input type="text" id="domain" name="domain" value="example.com">
+                </div>
+                <button type="submit" class="button">Lookup</button>
+            </form>
+            <div id="lookup-results" class="results-area">
+                </div>
+        </section>
+
+        <section class="potential-attacks">
+            <h3>Try These Attacks (Educational Purposes Only)</h3>
+            <ul>
+                <li><code>example.com ; ls -l</code> (Try to list files - *Simulated*)</li>
+                <li><code>example.com | whoami</code> (Try to get the current user - *Simulated*)</li>
+                <li><code>example.com && cat /etc/passwd</code> (Try to view a system file - *Simulated*)</li>
+            </ul>
+            <p class="warning">Executing arbitrary commands on real systems is dangerous and illegal.</p>
+        </section>
+    </main>
+
+    <script>
+        document.getElementById('lookup-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const domain = document.getElementById('domain').value;
+            const resultsDiv = document.getElementById('lookup-results');
+            resultsDiv.innerHTML = '<p class="loading">Looking up IP...</p>';
+
+            // Simulate command execution (vulnerable)
+            setTimeout(() => {
+                let output = '';
+                if (domain.includes(';') || domain.includes('|') || domain.includes('&&')) {
+                    output += '<p class="warning">Detected command injection attempt!</p>';
+                    if (domain.includes('ls')) {
+                        output += '<pre><code>(Simulated ls -l output):\ntotal 4\n-rw-r--r-- 1 user user 1024 Apr 19 23:00 file1.txt\n-rw-r--r-- 1 user user 2048 Apr 19 23:00 file2.txt</code></pre>';
+                    }
+                    if (domain.includes('whoami')) {
+                        output += '<pre><code>(Simulated whoami output):\nwww-data</code></pre>';
+                    }
+                    if (domain.includes('cat') && domain.includes('passwd')) {
+                        output += '<pre><code>(Simulated cat /etc/passwd output):\nroot:x:0:0:root:/root:/bin/bash\nbin:x:1:1:bin:/bin:/sbin/nologin\n...</code></pre>';
+                    } else if (!domain.includes('ls') && !domain.includes('whoami')) {
+                        output += `<p>Attempted command: <code>${domain}</code> (simulated).</p>`;
+                    }
+                } else if (domain === 'example.com') {
+                    output = '<p>IP address for example.com: 93.184.216.34</p>';
+                } else if (domain === 'google.com') {
+                    output = '<p>IP address for google.com: 142.250.185.46</p>';
+                } else {
+                    output = `<p>Could not find IP address for: ${domain} (simulated).</p>`;
+                }
+                resultsDiv.innerHTML = output;
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

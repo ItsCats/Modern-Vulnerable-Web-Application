@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSRF - Modern Vulnerable Web Application</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="vulnerability-style.css">
+</head>
+<body>
+    <header>
+        <h1><a href="index.html" class="site-title">Modern <span class="neon-accent">Vulnerable</span> Web <span class="glitch">App</span></a></h1>
+        <nav>
+            <ul>
+                <li><a href="sql-injection.html">SQL Injection</a></li>
+                <li><a href="xss.html">XSS</a></li>
+                <li><a href="csrf.html" class="current-page">CSRF</a></li>
+                <li><a href="idor.html">IDOR</a></li>
+                <li><a href="path-traversal.html">Path Traversal</a></li>
+                <li><a href="command-injection.html">Command Injection</a></li>
+                <li><a href="about.html">About</a></li>
+                <li><a href="dos.html">Simulated DoS</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="vulnerability-content">
+        <section class="vulnerability-explanation">
+            <h2>Cross-Site Request Forgery (CSRF)</h2>
+            <p>Cross-Site Request Forgery (CSRF) is an attack that forces an end user to execute unwanted actions on a web application in which they're currently authenticated. CSRF attacks specifically target state-changing requests, not data theft, since the attacker has no way to see the response to the forged request.</p>
+            <p>Below is a simulated banking action. Imagine you are logged in and can transfer funds. An attacker could potentially trick you into making an unintended transfer without proper protection.</p>
+        </section>
+
+        <section class="transfer-funds">
+            <h3>Transfer Funds</h3>
+            <p>Logged in as: <span id="logged-in-user">user123</span> (Simulated)</p>
+            <form id="transfer-form">
+                <div class="form-group">
+                    <label for="recipient">Recipient:</label>
+                    <select id="recipient" name="recipient">
+                        <option value="alice">Alice</option>
+                        <option value="bob">Bob</option>
+                        <option value="charlie">Charlie</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="amount">Amount:</label>
+                    <input type="number" id="amount" name="amount" value="10" min="1">
+                </div>
+                <button type="submit" class="button">Transfer</button>
+            </form>
+            <div id="transfer-result" class="results-area">
+            </div>
+        </section>
+
+        <section class="potential-attack-vector">
+            <h3>Potential Attack</h3>
+            <p>Imagine an attacker embedding the following form (or a similar request) on a website or in an email. If you are logged into this application, submitting it could perform an unintended transfer:</p>
+            <pre><code>
+&lt;form action="" method="POST"&gt;
+    &lt;input type="hidden" name="recipient" value="attacker-account"&gt;
+    &lt;input type="hidden" name="amount" value="1000"&gt;
+    &lt;button type="submit"&gt;Claim Free Money!&lt;/button&gt;
+&lt;/form&gt;
+            </code></pre>
+            <p class="warning">Submitting the form above on a real vulnerable site could have consequences.</p>
+        </section>
+    </main>
+
+    <script>
+        document.getElementById('transfer-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const recipient = document.getElementById('recipient').value;
+            const amount = document.getElementById('amount').value;
+            const resultDiv = document.getElementById('transfer-result');
+            resultDiv.innerHTML = `<p>Simulated transfer of ${amount} to ${recipient} initiated.</p>`;
+            // In a real vulnerable application, this POST request would be sent to the server without a proper CSRF token.
+        });
+    </script>
+</body>
+</html>

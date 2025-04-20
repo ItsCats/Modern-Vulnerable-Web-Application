@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IDOR - Modern Vulnerable Web Application</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="vulnerability-style.css">
+</head>
+<body>
+    <header>
+        <h1><a href="index.html" class="site-title">Modern <span class="neon-accent">Vulnerable</span> Web <span class="glitch">App</span></a></h1>
+        <nav>
+            <ul>
+                <li><a href="sql-injection.html">SQL Injection</a></li>
+                <li><a href="xss.html">XSS</a></li>
+                <li><a href="csrf.html">CSRF</a></li>
+                <li><a href="idor.html" class="current-page">IDOR</a></li>
+                <li><a href="path-traversal.html">Path Traversal</a></li>
+                <li><a href="command-injection.html">Command Injection</a></li>
+                <li><a href="about.html">About</a></li>
+                <li><a href="dos.html">Simulated DoS</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="vulnerability-content">
+        <section class="vulnerability-explanation">
+            <h2>Insecure Direct Object References (IDOR)</h2>
+            <p>Insecure Direct Object References (IDOR) is an access control vulnerability that occurs when an application uses user-provided input to directly access objects without sufficient authorization checks. This allows attackers to bypass authorization and access resources belonging to other users by simply modifying the value of a parameter used to directly point to an object.</p>
+            <p>Below, you can view a simulated user profile by ID. Notice your own (simulated) User ID. Try changing the ID in the input field to view other profiles.</p>
+        </section>
+
+        <section class="view-profile">
+            <h3>View User Profile</h3>
+            <p>Your User ID (Simulated): <span id="your-user-id">1</span></p>
+            <form id="profile-form">
+                <div class="form-group">
+                    <label for="user-id">User ID to View:</label>
+                    <input type="number" id="user-id" name="user-id" value="1" min="1">
+                </div>
+                <button type="submit" class="button">View Profile</button>
+            </form>
+            <div id="profile-details" class="results-area">
+                </div>
+        </section>
+
+        <section class="potential-attack">
+            <h3>Exploiting IDOR</h3>
+            <p>If user IDs are sequential or predictable, an attacker who knows their own User ID might be able to guess or enumerate other valid IDs to access sensitive information. In real-world applications, these IDs might be database keys, document numbers, or other internal references.</p>
+            <ul>
+                <li>Try changing the User ID to values near your own (e.g., 2, 3, or even higher numbers).</li>
+                <li>Imagine if these profiles contained private data like addresses, phone numbers, or financial information.</li>
+            </ul>
+            <p class="warning">Always ensure proper authorization checks are in place to prevent unauthorized access to resources.</p>
+        </section>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('profile-form').addEventListener('submit', function(event) {
+                event.preventDefault();
+                const userId = document.getElementById('user-id').value;
+                const profileDiv = document.getElementById('profile-details');
+                profileDiv.innerHTML = '<p class="loading">Loading profile...</p>';
+
+                // Simulate fetching a profile based on ID (vulnerable)
+                setTimeout(() => {
+                    const userProfiles = {
+                        1: { username: 'alice', email: 'alice@example.com', role: 'user' },
+                        2: { username: 'bob', email: 'bob@example.com', role: 'user' },
+                        3: { username: 'charlie', email: 'charlie@example.com', role: 'admin' },
+                        4: { username: 'david', email: 'david@example.com', role: 'user' },
+                        5: { username: 'eve', email: 'eve@example.com', role: 'user' }
+                        // Added more simulated users
+                    };
+
+                    const profile = userProfiles[userId];
+
+                    if (profile) {
+                        let details = '<ul>';
+                        for (const key in profile) {
+                            details += `<li><strong>${key}:</strong> ${profile[key]}</li>`;
+                        }
+                        details += '</ul>';
+                        profileDiv.innerHTML = details;
+                    } else {
+                        profileDiv.innerHTML = '<p>User profile not found.</p>';
+                    }
+                }, 1000);
+            });
+
+            // Simulate setting the "logged-in" user ID
+            document.getElementById('your-user-id').textContent = '1';
+        });
+    </script>
+</body>
+</html>
