@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cross-Site Request Forgery · MVWA</title>
+  <meta name="description" content="Hands-on CSRF lab: build a malicious page that forges a money transfer, bypass weak Referer validation, and see how SameSite cookies and anti-CSRF tokens stop it.">
+  <meta name="theme-color" content="#0b1017">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23121821'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='14' font-weight='700' fill='%233cc9b4' text-anchor='middle'%3Emv%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body data-root="../" data-page="lab">
+  <div id="site-header"></div>
+
+  <div class="container lab-layout">
+    <aside id="lab-sidebar" class="lab-sidebar" aria-label="All labs"></aside>
+
+    <main id="main">
+      <div id="lab-head" class="lab-head"></div>
+      <section id="level-control" class="panel" aria-label="Security level"></section>
+
+      <section class="panel" aria-labelledby="lab-title">
+        <div class="panel-head">
+          <h2 id="lab-title">Target: Harbor Bank</h2>
+          <button type="button" class="btn btn-ghost btn-sm" id="reset-bank">Reset account</button>
+        </div>
+        <div class="panel-body">
+          <p>The victim, Alex, is signed in to online banking in one tab. You control <span class="mono">attacker.test</span> and can get Alex to open a page you wrote. The page's HTML is parsed (not executed): forms on it are auto-submitted and image or iframe URLs are requested, just as a browser would do, including its cookie and Referer rules.</p>
+
+          <div class="split">
+            <div class="browser">
+              <div class="browser-bar"><span class="lights"><i></i><i></i><i></i></span><span class="url">https://<b>bank.harbor.test</b>/accounts</span></div>
+              <div class="browser-body">
+                <div class="field-row" style="justify-content:space-between;align-items:center;margin-bottom:1rem">
+                  <div>
+                    <div class="muted" style="font-size:13px">Signed in as <strong style="color:var(--text)">Alex Rivera</strong> · Checking ••4821</div>
+                    <div style="font-size:1.8rem;font-weight:700;letter-spacing:-.02em" id="balance">$0.00</div>
+                  </div>
+                  <span class="badge badge-ok"><span class="dot"></span>Session active</span>
+                </div>
+                <form id="transfer-form" autocomplete="off">
+                  <div class="field-row">
+                    <div class="grow">
+                      <label for="t-to">Payee</label>
+                      <select class="select" id="t-to">
+                        <option value="jordan">Jordan Lee</option>
+                        <option value="sam">Sam Okafor</option>
+                        <option value="landlord">Bayview Properties</option>
+                      </select>
+                    </div>
+                    <div style="flex:0 1 130px">
+                      <label for="t-amount">Amount</label>
+                      <input class="input" id="t-amount" type="number" min="1" step="1" value="50">
+                    </div>
+                    <button class="btn btn-primary" type="submit">Send</button>
+                  </div>
+                  <p class="muted mono" style="font-size:12px;margin:.5rem 0 0" data-show-level="high">hidden csrf_token = <span id="csrf-token-view"></span></p>
+                </form>
+                <div class="label" style="margin-top:1.1rem">Recent activity</div>
+                <div class="table-wrap"><table class="data"><thead><tr><th>Payee</th><th>Via</th><th style="text-align:right">Amount</th></tr></thead><tbody id="tx-body"></tbody></table></div>
+              </div>
+            </div>
+
+            <div class="browser evil">
+              <div class="browser-bar"><span class="lights"><i></i><i></i><i></i></span><span class="url" id="evil-url-bar">https://<b>prizes.attacker.test</b>/claim</span></div>
+              <div class="browser-body">
+                <div class="field">
+                  <label for="evil-url">Attacker page URL</label>
+                  <input class="input mono" id="evil-url" value="https://prizes.attacker.test/claim" spellcheck="false">
+                </div>
+                <div class="field">
+                  <div class="field-row" style="justify-content:space-between;align-items:center;margin-bottom:.35rem">
+                    <label for="evil-html" style="margin:0">Attacker page HTML</label>
+                    <select class="select" id="evil-template" style="width:auto;padding:.3rem .5rem;font-size:13px" aria-label="Load an example payload">
+                      <option value="">Load example…</option>
+                      <option value="post">Auto-submitting POST form</option>
+                      <option value="get">Zero-click GET (image tag)</option>
+                      <option value="noref">POST with Referer suppressed</option>
+                    </select>
+                  </div>
+                  <textarea class="textarea mono" id="evil-html" rows="9" spellcheck="false"></textarea>
+                </div>
+                <button class="btn btn-danger" type="button" id="evil-visit">Victim opens this page</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:1.25rem">
+            <div class="label">bank.harbor.test request log <span class="muted" style="font-weight:400">· what the bank's server received</span></div>
+            <div class="http" id="req-log" aria-live="polite"><span class="hdr"># No requests yet.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="objectives" class="panel"></section>
+
+      <section class="panel" aria-labelledby="code-title">
+        <div class="panel-head">
+          <h2 id="code-title">Server-side implementation</h2>
+          <span class="badge mono">routes/transfer.js</span>
+        </div>
+        <div class="panel-body">
+          <div data-show-level="low">
+            <p>The endpoint trusts the session cookie alone. Browsers attach cookies to cross-site requests, so any page can trigger a transfer. It even accepts GET.</p>
+            <div class="code-card"><div class="code-card-head"><span>Low · vulnerable</span><span>Node.js</span></div>
+<pre><code data-lang="js">res.cookie("session", sid, { secure: true, [[bad]]sameSite: "none"[[/bad]] });
+
+[[bad]]app.all[[/bad]]("/transfer", requireSession, (req, res) =&gt; {   // GET or POST
+  const { to, amount } = { ...req.query, ...req.body };
+  transfer(req.user, to, Number(amount));
+  res.redirect("/accounts");
+});</code></pre></div>
+          </div>
+          <div data-show-level="medium">
+            <p>The endpoint now requires POST and checks the Referer header. The check uses a substring match and lets requests without a Referer through, since some proxies strip it.</p>
+            <div class="code-card"><div class="code-card-head"><span>Medium · weak mitigation</span><span>Node.js</span></div>
+<pre><code data-lang="js">app.post("/transfer", requireSession, (req, res) =&gt; {
+  const referer = req.get("Referer");
+  if ([[bad]]referer &amp;&amp; !referer.includes("bank.harbor.test")[[/bad]]) {
+    return res.status(403).send("Cross-site request blocked");
+  }
+  transfer(req.user, req.body.to, Number(req.body.amount));
+  res.redirect("/accounts");
+});</code></pre></div>
+          </div>
+          <div data-show-level="high">
+            <p>Three independent layers. <code>SameSite=Lax</code> keeps the cookie off cross-site POSTs and subresource requests. A per-session synchronizer token is required, and an attacker can't read it. The Origin header must match exactly.</p>
+            <div class="code-card"><div class="code-card-head"><span>High · secure</span><span>Node.js</span></div>
+<pre><code data-lang="js">res.cookie("session", sid, { secure: true, httpOnly: true, [[good]]sameSite: "lax"[[/good]] });
+
+// Constant-time comparison that never throws on missing or mismatched-length input
+const tokensMatch = (a, b) =&gt;
+  typeof a === "string" &amp;&amp; typeof b === "string" &amp;&amp; a.length === b.length &amp;&amp;
+  crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+
+app.post("/transfer", requireSession, (req, res) =&gt; {
+  if ([[good]]req.get("Origin") !== "https://bank.harbor.test"[[/good]]) return res.sendStatus(403);
+  if ([[good]]!tokensMatch(req.body.csrf_token, req.session.csrfToken)[[/good]]) return res.sendStatus(403);
+  transfer(req.user, req.body.to, Number(req.body.amount));
+  res.redirect(303, "/accounts");
+});</code></pre></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="learn-title">
+        <div class="panel-head"><h2 id="learn-title">How the attack works</h2></div>
+        <div class="panel-body prose">
+          <h3>Root cause</h3>
+          <p>Browsers attach a site's cookies to requests sent to that site, whichever page started the request. If a server identifies the user by cookie alone, it cannot tell a request the user meant to send from one forged by another site. The attacker never sees the response. They don't need to, because the state change (a transfer, an email change, a password reset) is the goal.</p>
+          <h3>Impact</h3>
+          <ul>
+            <li>Unauthorized fund transfers, purchases or account setting changes.</li>
+            <li>Account takeover by changing the account's email address or password.</li>
+            <li>Admin actions performed through a privileged user's browser.</li>
+          </ul>
+          <h3>Why the Medium fix fails</h3>
+          <p>Substring checks match attacker-controlled hosts such as <code>bank.harbor.test.attacker.test</code>. Allowing a missing Referer is also exploitable, because the attacker's page can suppress it with <code>&lt;meta name="referrer" content="no-referrer"&gt;</code>. Requiring POST alone does nothing: a hidden form can POST just as easily.</p>
+          <h3>Remediation</h3>
+          <ul>
+            <li>Use a synchronizer token or a signed double-submit cookie on every state-changing request. Most frameworks ship this built in.</li>
+            <li>Set session cookies to <code>SameSite=Lax</code> or <code>Strict</code> as defense in depth.</li>
+            <li>Verify the <code>Origin</code> header (or <code>Sec-Fetch-Site</code>) against an exact allowlist.</li>
+            <li>Never change state on GET. Ask for re-authentication before sensitive actions.</li>
+          </ul>
+          <h3>References</h3>
+          <ul class="ref-list">
+            <li><a class="badge" href="https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP CSRF Prevention Cheat Sheet</a></li>
+            <li><a class="badge" href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#samesitesamesite-value" target="_blank" rel="noopener">MDN: SameSite cookies</a></li>
+            <li><a class="badge" href="https://cwe.mitre.org/data/definitions/352.html" target="_blank" rel="noopener">CWE-352</a></li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="site-footer"></div>
+
+  <script src="../assets/js/core.js"></script>
+  <script src="../assets/js/labs/csrf.js"></script>
+</body>
+</html>

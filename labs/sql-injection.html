@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SQL Injection · MVWA</title>
+  <meta name="description" content="Hands-on SQL injection lab: authentication bypass, UNION-based data exfiltration and schema enumeration against a real SQLite database running in your browser.">
+  <meta name="theme-color" content="#0b1017">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23121821'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='14' font-weight='700' fill='%233cc9b4' text-anchor='middle'%3Emv%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body data-root="../" data-page="lab">
+  <div id="site-header"></div>
+
+  <div class="container lab-layout">
+    <aside id="lab-sidebar" class="lab-sidebar" aria-label="All labs"></aside>
+
+    <main id="main">
+      <div id="lab-head" class="lab-head"></div>
+      <section id="level-control" class="panel" aria-label="Security level"></section>
+
+      <section class="panel" aria-labelledby="lab-title">
+        <div class="panel-head">
+          <h2 id="lab-title">Target: Acme Store</h2>
+          <div class="btn-row">
+            <span class="badge mono" id="db-status"><span class="dot"></span>Loading SQLite…</span>
+            <button type="button" class="btn btn-ghost btn-sm" id="reset-db">Reset database</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <p>The store's back end builds SQL queries for its product search and its staff login. Both run against a real SQLite engine compiled to WebAssembly, so your payloads are parsed and executed exactly as a real database would execute them.</p>
+
+          <div class="stack">
+            <div class="browser">
+              <div class="browser-bar"><span class="lights"><i></i><i></i><i></i></span><span class="url">https://<b>store.acme.test</b>/products?q=<span id="search-url"></span></span></div>
+              <div class="browser-body">
+                <form id="search-form" autocomplete="off">
+                  <label for="search-q">Search products</label>
+                  <div class="input-group">
+                    <input class="input mono" id="search-q" name="q" placeholder="e.g. keyboard" spellcheck="false">
+                    <button class="btn btn-primary" type="submit" disabled>Search</button>
+                  </div>
+                </form>
+                <div class="field" style="margin-top:1rem">
+                  <div class="label">Results</div>
+                  <div id="search-results" class="result-box" data-placeholder="Run a search to see results."></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="browser">
+              <div class="browser-bar"><span class="lights"><i></i><i></i><i></i></span><span class="url">https://<b>store.acme.test</b>/staff/login</span></div>
+              <div class="browser-body">
+                <form id="login-form" autocomplete="off" style="max-width:460px">
+                  <div class="field">
+                    <label for="login-user">Username</label>
+                    <input class="input mono" id="login-user" name="username" spellcheck="false">
+                  </div>
+                  <div class="field">
+                    <label for="login-pass">Password</label>
+                    <input class="input mono" id="login-pass" name="password" type="text" spellcheck="false">
+                  </div>
+                  <button class="btn btn-primary" type="submit" disabled>Sign in</button>
+                </form>
+                <div class="field" style="margin-top:1rem">
+                  <div class="label">Response</div>
+                  <div id="login-results" class="result-box" data-placeholder="Sign in to see the server's response."></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:1.25rem">
+            <div class="label">Query inspector <span class="muted" style="font-weight:400">· the exact statement the server sent to the database</span></div>
+            <pre class="terminal" id="query-log" aria-live="polite"><span class="dim">-- Waiting for the first query…</span></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="objectives" class="panel"></section>
+
+      <section class="panel" aria-labelledby="code-title">
+        <div class="panel-head">
+          <h2 id="code-title">Server-side implementation</h2>
+          <span class="badge mono">routes/store.js</span>
+        </div>
+        <div class="panel-body">
+          <div data-show-level="low">
+            <p>User input is concatenated directly into the SQL string, and raw database errors are returned to the client. The samples use <code>better-sqlite3</code>.</p>
+            <div class="code-card"><div class="code-card-head"><span>Low · vulnerable</span><span>Node.js</span></div>
+<pre><code data-lang="js">app.get("/products", (req, res) =&gt; {
+  const sql = "SELECT id, name, category, price FROM products " +
+              "WHERE released = 1 AND name LIKE '%" [[bad]]+ req.query.q +[[/bad]] "%'";
+  try {
+    res.json(db.prepare(sql).all());
+  } catch (err) {
+    res.status(500).send([[bad]]err.message[[/bad]]);          // leaks database errors
+  }
+});
+
+app.post("/staff/login", (req, res) =&gt; {
+  const { username, password } = req.body;
+  const sql = "SELECT id, username, role FROM users " +
+              "WHERE username = '" [[bad]]+ username +[[/bad]] "' AND password = '" [[bad]]+ password +[[/bad]] "'";
+  const user = db.prepare(sql).get();
+  user ? startSession(res, user) : res.status(401).end();
+});</code></pre></div>
+          </div>
+          <div data-show-level="medium">
+            <p>A developer added a blocklist that strips "dangerous" keywords. The query is still built by concatenation.</p>
+            <div class="code-card"><div class="code-card-head"><span>Medium · weak mitigation</span><span>Node.js</span></div>
+<pre><code data-lang="js">// Remove keywords commonly used in SQL injection payloads
+function sanitize(input) {
+  return input.replace([[bad]]/OR|UNION|SELECT|--/g[[/bad]], "");   // case-sensitive, single pass
+}
+
+app.get("/products", (req, res) =&gt; {
+  const q = sanitize(req.query.q);
+  const sql = "SELECT id, name, category, price FROM products " +
+              "WHERE released = 1 AND name LIKE '%" [[bad]]+ q +[[/bad]] "%'";
+  try {
+    res.json(db.prepare(sql).all());
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});</code></pre></div>
+          </div>
+          <div data-show-level="high">
+            <p>Parameterized queries keep code and data separate: the statement is compiled first, and user input is bound afterwards as a value that can never change the query's structure.</p>
+            <div class="code-card"><div class="code-card-head"><span>High · secure</span><span>Node.js</span></div>
+<pre><code data-lang="js">const searchProducts = db.prepare(
+  "SELECT id, name, category, price FROM products WHERE released = 1 AND name LIKE [[good]]?[[/good]]"
+);
+const findStaff = db.prepare(
+  "SELECT id, username, role, password_hash FROM users WHERE username = [[good]]?[[/good]]"
+);
+
+app.get("/products", (req, res) =&gt; {
+  res.json(searchProducts.all([[good]]`%${req.query.q}%`[[/good]]));
+});
+
+app.post("/staff/login", async (req, res) =&gt; {
+  const user = findStaff.get([[good]]req.body.username[[/good]]);
+  const ok = user &amp;&amp; await argon2.verify(user.password_hash, req.body.password);
+  if (!ok) return res.status(401).json({ error: "Invalid credentials" });   // generic error
+  startSession(res, user);
+});</code></pre></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="learn-title">
+        <div class="panel-head"><h2 id="learn-title">How the attack works</h2></div>
+        <div class="panel-body prose">
+          <h3>Root cause</h3>
+          <p>When an application builds a query by concatenating strings, the database cannot tell which characters came from the developer and which came from the user. A single quote in the input closes the string literal early, and everything after it is interpreted as SQL. The payload <code>admin'--</code> turns the login query into <code>WHERE username = 'admin'--' AND password = '…'</code>: the password check is commented out.</p>
+          <h3>Impact</h3>
+          <ul>
+            <li>Authentication bypass and account takeover.</li>
+            <li>Disclosure of the entire database via <code>UNION SELECT</code>, including credentials and personal data.</li>
+            <li>Data modification or destruction through stacked queries such as <code>; DROP TABLE users</code>, on drivers that allow several statements per call (mysql2 with <code>multipleStatements</code>, SQL Server, PostgreSQL's simple query protocol). <code>better-sqlite3</code>, used here, rejects them. Try it.</li>
+            <li>On some engines, file system access or command execution on the database host.</li>
+          </ul>
+          <h3>Why the Medium fix fails</h3>
+          <p>Blocklists try to enumerate every bad input, and attackers only need one they missed. SQL keywords are case-insensitive, so <code>union</code> passes a case-sensitive filter; <code>/*</code> comments replace <code>--</code>; and single-pass removal can be defeated by nesting, as in <code>UNIUNIONON</code>.</p>
+          <h3>Remediation</h3>
+          <ul>
+            <li>Use parameterized queries or prepared statements for every query, including those built by ORMs with raw fragments.</li>
+            <li>Allowlist identifiers that cannot be parameterized, such as sort columns and table names.</li>
+            <li>Run the application with a least-privilege database account, and keep multi-statement execution disabled in the driver.</li>
+            <li>Return generic error messages and log the details server-side.</li>
+            <li>Store passwords with a slow, salted hash (Argon2id, scrypt or bcrypt), never in plaintext.</li>
+          </ul>
+          <h3>References</h3>
+          <ul class="ref-list">
+            <li><a class="badge" href="https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP SQL Injection Prevention Cheat Sheet</a></li>
+            <li><a class="badge" href="https://owasp.org/Top10/2025/A05_2025-Injection/" target="_blank" rel="noopener">OWASP A05:2025 Injection</a></li>
+            <li><a class="badge" href="https://cwe.mitre.org/data/definitions/89.html" target="_blank" rel="noopener">CWE-89</a></li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="site-footer"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.min.js"></script>
+  <script src="../assets/js/core.js"></script>
+  <script src="../assets/js/labs/sql-injection.js"></script>
+</body>
+</html>

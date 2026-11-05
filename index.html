@@ -1,35 +1,268 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Modern Vulnerable Web App</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MVWA — Modern Vulnerable Web Application</title>
+  <meta name="description" content="An open-source, intentionally vulnerable web application for hands-on security training. Seven labs mapped to the OWASP Top 10, three security levels each, and side-by-side vulnerable and fixed code. Runs entirely in your browser.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="MVWA — Modern Vulnerable Web Application">
+  <meta property="og:description" content="Hands-on web security labs that run entirely in your browser. Exploit the vulnerability, understand the root cause, then study the fix.">
+  <meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b1017" media="(prefers-color-scheme: dark)">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23121821'/%3E%3Cpath d='M16 6.5l7.5 3v6c0 4.6-3.2 8.4-7.5 9.8-4.3-1.4-7.5-5.2-7.5-9.8v-6z' fill='none' stroke='%233cc9b4' stroke-width='2.2' stroke-linejoin='round'/%3E%3Cpath d='M12.6 15.8l2.4 2.4 4.4-4.6' fill='none' stroke='%23e8edf3' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <link rel="stylesheet" href="assets/css/home.css">
 </head>
-<body>
-    <div class="abstract-background"></div>
-    <header>
-        <h1>Modern <span class="neon-accent">Vulnerable</span> Web <span class="glitch">App</span></h1>
-        <nav>
-            <ul>
-                <li><a href="sql-injection.html">SQL Injection</a></li>
-                <li><a href="xss.html">XSS</a></li>
-                <li><a href="csrf.html">CSRF</a></li>
-                <li><a href="idor.html">IDOR</a></li>
-                <li><a href="path-traversal.html">Path Traversal</a></li>
-                <li><a href="command-injection.html">Command Injection</a></li>
-                <li><a href="about.html">About</a></li>
-                <li><a href="dos.html">Simulated DoS</a></li>
-            </ul>
-        </nav>
-    </header>
+<body data-root="" data-page="home">
+  <div id="site-header"></div>
 
-    <main class="hero">
-        <div class="hero-content">
-            <h2>Unveiling the Underworld of <span class="neon-accent">Web Security</span></h2>
-            <p>Explore intentionally vulnerable web applications and learn about common security flaws firsthand.</p>
-            <a href="sql-injection.html" class="button">Enter Now!</a>
+  <main id="main">
+    <!-- Hero -------------------------------------------------------------->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="container">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">Open-source web security training lab</p>
+            <h1 id="hero-title"><span>Break it.</span> <span>Understand it.</span> <span class="h1-accent">Fix it.</span></h1>
+            <p class="lead">
+              MVWA is a set of hands-on labs for the vulnerabilities behind real-world breaches.
+              Exploit each flaw against a simulated back-end, see exactly why it works, then compare
+              the vulnerable code with a secure implementation &mdash; all inside your browser, with
+              nothing to install.
+            </p>
+            <div class="btn-row hero-ctas">
+              <a class="btn btn-primary" href="labs/sql-injection.html">
+                Start the first lab
+                <svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </a>
+              <a class="btn btn-secondary" id="repo-link" href="https://github.com/ItsCats/Modern-Vulnerable-Web-Application" target="_blank" rel="noopener">
+                <svg class="btn-ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>
+                View source
+              </a>
+            </div>
+            <ul class="hero-meta" aria-label="Highlights">
+              <li class="badge">OWASP Top 10:2025</li>
+              <li class="badge">CWE mapped</li>
+              <li class="badge">Runs 100% client-side</li>
+            </ul>
+          </div>
+
+          <figure class="code-card hero-terminal" aria-label="Example: the same SQL injection payload against the Low and High security levels">
+            <div class="code-card-head">
+              <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="term-title">POST /api/login</span>
+              <span class="term-meta">sql-injection</span>
+            </div>
+<pre class="terminal"><code><span class="tok-c"># Same payload, two security levels</span>
+<span class="prompt">$</span> user=<span class="inj">admin' --</span>  pass=x
+
+<span class="lvl-tag low">Low</span> <span class="dim">string concatenation</span>
+<span class="tok-k">SELECT</span> * <span class="tok-k">FROM</span> users
+ <span class="tok-k">WHERE</span> user = <span class="tok-s">'admin'</span> <span class="tok-c">--' AND pass = 'x'</span>
+<span class="err">200 OK  Logged in as admin</span>
+
+<span class="lvl-tag high">High</span> <span class="dim">parameterized query</span>
+<span class="tok-k">SELECT</span> * <span class="tok-k">FROM</span> users
+ <span class="tok-k">WHERE</span> user = ? <span class="tok-k">AND</span> pass = ?
+<span class="dim">params</span> [<span class="tok-s">"admin' --"</span>, <span class="tok-s">"x"</span>]
+<span class="ok">401     Invalid credentials</span></code></pre>
+          </figure>
         </div>
-    </main>
+
+        <dl class="stats" aria-label="At a glance">
+          <div class="stat"><dt class="k">Hands-on labs</dt><dd class="v" id="stat-labs">7</dd></div>
+          <div class="stat"><dt class="k">Objectives</dt><dd class="v" id="stat-objectives">23</dd></div>
+          <div class="stat"><dt class="k">Security levels</dt><dd class="v" id="stat-levels">3</dd></div>
+          <div class="stat"><dt class="k">Servers required</dt><dd class="v">0</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- Labs -------------------------------------------------------------->
+    <section class="section" id="labs" aria-labelledby="labs-title">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Labs</p>
+            <h2 id="labs-title">Seven vulnerabilities, one realistic target each</h2>
+            <p>Every lab simulates a small application with a real flaw. Complete its objectives to check them off; progress is saved in this browser only.</p>
+          </div>
+          <div class="progress-card overall-progress">
+            <div class="progress-meta">
+              <span class="progress-title">Overall progress</span>
+              <span class="progress-label" id="overall-label">0 of 0 objectives</span>
+            </div>
+            <div class="progress-track" role="progressbar" aria-labelledby="overall-label" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="overall-track">
+              <div class="progress-fill" id="overall-fill" style="width:0%"></div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="reset-progress">Reset progress</button>
+          </div>
+        </div>
+
+        <div class="lab-grid" id="lab-grid">
+          <noscript><p class="muted">The lab list needs JavaScript. Every lab is also available directly under <code>labs/</code>.</p></noscript>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works ------------------------------------------------------>
+    <section class="section" id="how-it-works" aria-labelledby="how-title">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">How it works</p>
+            <h2 id="how-title">A short loop that builds lasting intuition</h2>
+            <p>Each lab follows the same three steps, so you spend your time on the vulnerability rather than on the tooling.</p>
+          </div>
+        </div>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="n">01</span>
+            <h3>Exploit</h3>
+            <p>Attack a working feature &mdash; a login form, a file download, a money transfer &mdash; until you complete each objective. Hints are available if you get stuck.</p>
+          </li>
+          <li class="step">
+            <span class="n">02</span>
+            <h3>Understand</h3>
+            <p>Read the server-side code that handled your request, with the vulnerable line highlighted, and the reason the payload worked.</p>
+          </li>
+          <li class="step">
+            <span class="n">03</span>
+            <h3>Fix</h3>
+            <p>Raise the security level and watch the same payload fail. Compare the weak and secure implementations side by side.</p>
+          </li>
+        </ol>
+
+        <div class="subhead">
+          <h3>Three security levels in every lab</h3>
+          <p>Switch levels at any time to see how a defense changes the outcome of the same attack.</p>
+        </div>
+        <div class="levels">
+          <div class="level-card low">
+            <h3><span class="badge badge-danger"><span class="dot"></span>Low</span> Vulnerable</h3>
+            <p>No defences. The code makes the classic mistake, so textbook payloads work and the root cause is easy to see.</p>
+          </div>
+          <div class="level-card medium">
+            <h3><span class="badge badge-warn"><span class="dot"></span>Medium</span> Weak mitigation</h3>
+            <p>A plausible but flawed fix, such as a keyword blocklist or a Referer check. Learn why partial defences fail and how they are bypassed.</p>
+          </div>
+          <div class="level-card high">
+            <h3><span class="badge badge-ok"><span class="dot"></span>High</span> Secure</h3>
+            <p>The fix you would ship to production: parameterized queries, output encoding, CSRF tokens, authorization checks and safe APIs.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Under the hood ---------------------------------------------------->
+    <section class="section" id="architecture" aria-labelledby="arch-title">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Under the hood</p>
+            <h2 id="arch-title">Realistic behavior, zero infrastructure</h2>
+            <p>The back-ends are simulated in the browser, so the labs are safe to run anywhere and can be hosted as plain static files.</p>
+          </div>
+        </div>
+
+        <div class="feature-grid">
+          <div class="feature">
+            <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></svg></span>
+            <div>
+              <h3>Entirely client-side</h3>
+              <p>Static HTML, CSS and vanilla JavaScript with no build step. Every simulated request is handled inside the page, so lab data never reaches a server.</p>
+            </div>
+          </div>
+          <div class="feature">
+            <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7.5" ry="2.5"/><path d="M4.5 5.5v6c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5v-6M4.5 11.5v6c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5v-6"/></svg></span>
+            <div>
+              <h3>A real SQL engine</h3>
+              <p>The SQL injection lab runs genuine SQLite compiled to WebAssembly (sql.js), so UNION queries and schema enumeration behave exactly as they would on a server.</p>
+            </div>
+          </div>
+          <div class="feature">
+            <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3M12 18v3M4.6 6.6l2.1 2.1M17.3 15.3l2.1 2.1M3 12h3M18 12h3M4.6 17.4l2.1-2.1M17.3 8.7l2.1-2.1"/><circle cx="12" cy="12" r="3"/></svg></span>
+            <div>
+              <h3>Isolated in a Web Worker</h3>
+              <p>The ReDoS lab evaluates regular expressions off the main thread with a hard timeout, so catastrophic backtracking stalls the simulated server, not your tab.</p>
+            </div>
+          </div>
+          <div class="feature">
+            <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l2 2 4-4"/><path d="M12 3l7.5 3v6c0 4.6-3.2 8.4-7.5 9.8-4.3-1.4-7.5-5.2-7.5-9.8V6z"/></svg></span>
+            <div>
+              <h3>Mapped to industry standards</h3>
+              <p>Each lab references its OWASP Top 10:2025 category and CWE identifier, linking the exercise to the vocabulary used in real assessments.</p>
+            </div>
+          </div>
+          <div class="feature">
+            <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg></span>
+            <div>
+              <h3>No install, no accounts</h3>
+              <p>Open the site and start. There is nothing to configure. The only external resources are web fonts and the sql.js runtime, both loaded from public CDNs.</p>
+            </div>
+          </div>
+          <div class="feature">
+            <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg></span>
+            <div>
+              <h3>Accessible light and dark UI</h3>
+              <p>Semantic markup, keyboard-friendly controls, visible focus states, reduced-motion support and a theme that follows your system preference.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- About ------------------------------------------------------------->
+    <section class="section" id="about" aria-labelledby="about-title">
+      <div class="container">
+        <div class="about-grid">
+          <div class="about-copy">
+            <p class="eyebrow">About</p>
+            <h2 id="about-title">Built for learning secure development</h2>
+            <p>
+              MVWA is aimed at developers, students and anyone preparing for application-security work.
+              It is a modern, browser-only take on classic training targets such as DVWA: instead of
+              running a deliberately insecure server, every lab ships with a small simulated back-end and
+              the exact code that makes it vulnerable.
+            </p>
+            <p>
+              The goal is not to memorize payloads but to recognize the underlying pattern &mdash;
+              untrusted input reaching an interpreter, a missing authorization check, an unbounded
+              algorithm &mdash; and to know what the correct fix looks like.
+            </p>
+            <div class="btn-row">
+              <a class="btn btn-secondary btn-sm" id="repo-link-2" href="https://github.com/ItsCats/Modern-Vulnerable-Web-Application" target="_blank" rel="noopener">Read the code on GitHub</a>
+              <a class="btn btn-ghost btn-sm" href="https://owasp.org/Top10/2025/" target="_blank" rel="noopener">OWASP Top 10:2025</a>
+            </div>
+          </div>
+
+          <aside class="disclaimer" aria-labelledby="disclaimer-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+            <div>
+              <h3 id="disclaimer-title">Responsible use</h3>
+              <p>
+                This project is intentionally insecure and exists for educational purposes only. The
+                techniques it teaches are illegal to use against systems you do not own. Never test a
+                website, application or network without explicit written authorization from its owner.
+              </p>
+              <p>
+                Everything in MVWA runs locally in your browser, so practicing here harms no one.
+              </p>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/home.js"></script>
 </body>
 </html>
