@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cross-Site Scripting · MVWA</title>
+  <meta name="description" content="Hands-on cross-site scripting lab: reflected and stored XSS, filter evasion and session cookie theft, with output encoding, CSP and HttpOnly as the fix.">
+  <meta name="theme-color" content="#0b1017">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23121821'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='14' font-weight='700' fill='%233cc9b4' text-anchor='middle'%3Emv%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body data-root="../" data-page="lab">
+  <div id="site-header"></div>
+
+  <div class="container lab-layout">
+    <aside id="lab-sidebar" class="lab-sidebar" aria-label="All labs"></aside>
+
+    <main id="main">
+      <div id="lab-head" class="lab-head"></div>
+      <section id="level-control" class="panel" aria-label="Security level"></section>
+
+      <section class="panel" aria-labelledby="lab-title">
+        <div class="panel-head">
+          <h2 id="lab-title">Target: Northwind Outfitters</h2>
+          <span class="badge mono" title="Simulated cookie jar for the victim's session">Victim cookie: sessionid=<span id="cookie-mask">••••••••</span></span>
+        </div>
+        <div class="panel-body">
+          <p>You are attacking a shop's search page and its public guestbook. A customer is signed in on this page with a session cookie. Payloads really execute here; dialogs such as <code>alert()</code> are intercepted and logged instead of blocking the page, and outbound requests from your payload are captured rather than sent.</p>
+
+          <div class="split">
+            <div class="browser">
+              <div class="browser-bar"><span class="lights"><i></i><i></i><i></i></span><span class="url">https://<b>shop.northwind.test</b>/search?q=<span id="search-url"></span></span></div>
+              <div class="browser-body">
+                <form id="search-form" autocomplete="off">
+                  <label for="search-q">Search the catalogue</label>
+                  <div class="input-group">
+                    <input class="input mono" id="search-q" name="q" placeholder="e.g. hiking boots" spellcheck="false">
+                    <button class="btn btn-primary" type="submit">Search</button>
+                  </div>
+                </form>
+                <div id="search-out" class="result-box" data-sink="reflected" data-placeholder="Search results appear here." style="margin-top:1rem"></div>
+                <p class="muted" style="font-size:12.5px;margin:.6rem 0 0">The query is also read from the page URL, so a payload can be delivered as a link.</p>
+              </div>
+            </div>
+
+            <div class="browser">
+              <div class="browser-bar"><span class="lights"><i></i><i></i><i></i></span><span class="url">https://<b>shop.northwind.test</b>/guestbook</span></div>
+              <div class="browser-body">
+                <form id="gb-form" autocomplete="off">
+                  <div class="field">
+                    <label for="gb-name">Name</label>
+                    <input class="input" id="gb-name" maxlength="40" placeholder="Your name">
+                  </div>
+                  <div class="field">
+                    <label for="gb-msg">Message</label>
+                    <textarea class="textarea mono" id="gb-msg" rows="3" style="min-height:80px" placeholder="Leave a review…" spellcheck="false"></textarea>
+                  </div>
+                  <div class="btn-row">
+                    <button class="btn btn-primary" type="submit">Post message</button>
+                    <button class="btn btn-ghost" type="button" id="gb-clear">Clear guestbook</button>
+                  </div>
+                </form>
+                <div id="gb-list" data-sink="stored" style="margin-top:1rem"></div>
+                <p class="muted" style="font-size:12.5px;margin:.6rem 0 0">Stuck in a redirect loop? Open <a href="xss.html?safe">xss.html?safe</a> to load the page without rendering stored messages.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="split" style="margin-top:1.25rem">
+            <div>
+              <div class="label">Execution log <span class="muted" style="font-weight:400">· JavaScript that ran in the victim's page</span></div>
+              <pre class="terminal" id="exec-log" aria-live="polite"><span class="dim">// No script execution detected yet.</span></pre>
+            </div>
+            <div>
+              <div class="label">attacker.test access log <span class="muted" style="font-weight:400">· captured outbound requests</span></div>
+              <pre class="terminal" id="exfil-log" aria-live="polite"><span class="dim"># Waiting for incoming requests…</span></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="objectives" class="panel"></section>
+
+      <section class="panel" aria-labelledby="code-title">
+        <div class="panel-head">
+          <h2 id="code-title">Server-side implementation</h2>
+          <span class="badge mono">routes/shop.js</span>
+        </div>
+        <div class="panel-body">
+          <div data-show-level="low">
+            <p>User-controlled data is inserted into HTML without encoding, so the browser parses it as markup and runs any script it contains. The session cookie is readable from JavaScript.</p>
+            <div class="code-card"><div class="code-card-head"><span>Low · vulnerable</span><span>Node.js</span></div>
+<pre><code data-lang="js">app.get("/search", (req, res) =&gt; {
+  res.send(`&lt;p&gt;Results for "[[bad]]${req.query.q}[[/bad]]"&lt;/p&gt;`);
+});
+
+app.get("/guestbook", (req, res) =&gt; {
+  const items = comments.map(c =&gt; `&lt;div class="comment"&gt;&lt;b&gt;${c.name}&lt;/b&gt; [[bad]]${c.body}[[/bad]]&lt;/div&gt;`);
+  res.send(layout(items.join("")));
+});
+
+res.cookie("sessionid", token, { [[bad]]httpOnly: false[[/bad]] });</code></pre></div>
+          </div>
+          <div data-show-level="medium">
+            <p>A regular expression removes <code>&lt;script&gt;</code> elements before rendering. Every other way of running JavaScript from HTML still works.</p>
+            <div class="code-card"><div class="code-card-head"><span>Medium · weak mitigation</span><span>Node.js</span></div>
+<pre><code data-lang="js">// Strip script tags from user input
+function stripScripts(html) {
+  return html.replace([[bad]]/&lt;script[\s\S]*?&gt;[\s\S]*?&lt;\/script&gt;/gi[[/bad]], "");
+}
+
+app.get("/search", (req, res) =&gt; {
+  res.send(`&lt;p&gt;Results for "${stripScripts(req.query.q)}"&lt;/p&gt;`);
+});</code></pre></div>
+          </div>
+          <div data-show-level="high">
+            <p>All output is HTML-encoded for the context it is written into, a strict Content Security Policy blocks inline script as a second layer, and the session cookie is <code>HttpOnly</code> so script cannot read it even if an injection slipped through.</p>
+            <div class="code-card"><div class="code-card-head"><span>High · secure</span><span>Node.js</span></div>
+<pre><code data-lang="js">const escapeHtml = s =&gt; String(s).replace(/[&amp;&lt;&gt;"']/g, c =&gt; ENTITIES[c]);
+
+app.use((req, res, next) =&gt; {
+  res.set("Content-Security-Policy", [[good]]"default-src 'self'; script-src 'self'; object-src 'none'"[[/good]]);
+  next();
+});
+
+app.get("/search", (req, res) =&gt; {
+  res.send(`&lt;p&gt;Results for "[[good]]${escapeHtml(req.query.q)}[[/good]]"&lt;/p&gt;`);
+});
+
+res.cookie("sessionid", token, { [[good]]httpOnly: true, secure: true, sameSite: "lax"[[/good]] });</code></pre></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="learn-title">
+        <div class="panel-head"><h2 id="learn-title">How the attack works</h2></div>
+        <div class="panel-body prose">
+          <h3>Root cause</h3>
+          <p>XSS happens when untrusted data is written into a page in a context where the browser interprets it as code. Reflected XSS bounces a payload off a request, usually a link the victim clicks. Stored XSS saves the payload on the server, so it runs for every user who views the page. Either way the script runs with the site's origin and can do anything the user can.</p>
+          <h3>Impact</h3>
+          <ul>
+            <li>Session hijacking by reading <code>document.cookie</code> or tokens in storage.</li>
+            <li>Performing actions as the victim, which defeats CSRF tokens.</li>
+            <li>Credential phishing through injected login forms, keylogging and page defacement.</li>
+            <li>Self-propagating worms on social platforms, through stored XSS.</li>
+          </ul>
+          <h3>Why the Medium fix fails</h3>
+          <p>Script tags are only one of dozens of execution vectors. Event-handler attributes (<code>onerror</code>, <code>ontoggle</code>, <code>onfocus</code>), <code>javascript:</code> URLs and SVG elements all run code without a <code>&lt;script&gt;</code> tag. Sanitising HTML correctly requires a real parser such as DOMPurify. A regular expression is not enough.</p>
+          <h3>Remediation</h3>
+          <ul>
+            <li>Encode output for its context (HTML body, attribute, URL, JavaScript). Prefer templating engines that auto-escape, and avoid <code>innerHTML</code> in favour of <code>textContent</code>.</li>
+            <li>If rich HTML is required, sanitise it with a maintained library (DOMPurify) and an allowlist.</li>
+            <li>Deploy a strict Content Security Policy (nonces or hashes, no <code>'unsafe-inline'</code>).</li>
+            <li>Mark session cookies <code>HttpOnly</code>, <code>Secure</code> and <code>SameSite</code>.</li>
+            <li>Use Trusted Types to lock down DOM sinks in large front-end codebases.</li>
+          </ul>
+          <h3>References</h3>
+          <ul class="ref-list">
+            <li><a class="badge" href="https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP XSS Prevention Cheat Sheet</a></li>
+            <li><a class="badge" href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP" target="_blank" rel="noopener">MDN: Content Security Policy</a></li>
+            <li><a class="badge" href="https://cwe.mitre.org/data/definitions/79.html" target="_blank" rel="noopener">CWE-79</a></li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="site-footer"></div>
+
+  <script src="../assets/js/core.js"></script>
+  <script src="../assets/js/labs/xss.js"></script>
+</body>
+</html>

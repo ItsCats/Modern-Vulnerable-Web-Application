@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OS Command Injection · MVWA</title>
+  <meta name="description" content="Hands-on OS command injection lab: inject shell metacharacters into a ping utility, read files from the server, bypass a blocklist, and fix it with strict validation and argument arrays.">
+  <meta name="theme-color" content="#0b1017">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23121821'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='14' font-weight='700' fill='%233cc9b4' text-anchor='middle'%3Emv%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body data-root="../" data-page="lab">
+  <div id="site-header"></div>
+
+  <div class="container lab-layout">
+    <aside id="lab-sidebar" class="lab-sidebar" aria-label="All labs"></aside>
+
+    <main id="main">
+      <div id="lab-head" class="lab-head"></div>
+      <section id="level-control" class="panel" aria-label="Security level"></section>
+
+      <section class="panel" aria-labelledby="lab-title">
+        <div class="panel-head">
+          <h2 id="lab-title">Target: NetDiag network tools</h2>
+          <span class="badge mono">web01 · www-data</span>
+        </div>
+        <div class="panel-body">
+          <p>NetDiag is an internal dashboard that lets support staff check whether a host is reachable. Behind the form, the server runs <span class="mono">ping</span> through the system shell. The shell here is simulated, but it parses separators, pipes, quoting and command substitution just as <span class="mono">/bin/sh</span> does.</p>
+
+          <div class="browser">
+            <div class="browser-bar"><span class="lights"><i></i><i></i><i></i></span><span class="url">https://<b>netdiag.internal.test</b>/diagnostics/ping</span></div>
+            <div class="browser-body">
+              <form id="ci-form" autocomplete="off">
+                <label for="ci-host">Hostname or IP address</label>
+                <div class="input-group">
+                  <input class="input mono" id="ci-host" value="example.com" spellcheck="false">
+                  <button class="btn btn-primary" type="submit">Ping</button>
+                </div>
+              </form>
+              <div class="label" style="margin-top:1rem">Output</div>
+              <pre class="terminal" id="ci-term" aria-live="polite"><span class="dim"># Results from the server appear here.</span></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="objectives" class="panel"></section>
+
+      <section class="panel" aria-labelledby="code-title">
+        <div class="panel-head">
+          <h2 id="code-title">Server-side implementation</h2>
+          <span class="badge mono">app.py</span>
+        </div>
+        <div class="panel-body">
+          <div data-show-level="low">
+            <p>The host is concatenated into a command string and handed to <code>/bin/sh</code>. The shell interprets every metacharacter in it.</p>
+            <div class="code-card"><div class="code-card-head"><span>Low · vulnerable</span><span>Python / Flask</span></div>
+<pre><code data-lang="py">@app.post("/diagnostics/ping")
+def ping():
+    host = request.form["host"]
+    output = subprocess.run(
+        [[bad]]"ping -c 2 " + host[[/bad]], [[bad]]shell=True[[/bad]],
+        capture_output=True, text=True,
+    )
+    return output.stdout + output.stderr</code></pre></div>
+          </div>
+          <div data-show-level="medium">
+            <p>A blocklist rejects the three separators the developer thought of. The shell has many more ways to run a command.</p>
+            <div class="code-card"><div class="code-card-head"><span>Medium · weak mitigation</span><span>Python / Flask</span></div>
+<pre><code data-lang="py">BLOCKLIST = [[bad]][";", "&amp;&amp;", "|"][[/bad]]
+
+@app.post("/diagnostics/ping")
+def ping():
+    host = request.form["host"]
+    if any(token in host for token in BLOCKLIST):
+        abort(400, "Invalid characters in host")
+    output = subprocess.run("ping -c 2 " + host, shell=True,
+                            capture_output=True, text=True)
+    return output.stdout + output.stderr</code></pre></div>
+          </div>
+          <div data-show-level="high">
+            <p>Input is validated against a strict allowlist pattern, and the command runs as an argument vector with no shell. Even an unexpected value would reach <code>ping</code> as a single literal argument.</p>
+            <div class="code-card"><div class="code-card-head"><span>High · secure</span><span>Python / Flask</span></div>
+<pre><code data-lang="py">HOST_RE = re.compile(r"^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$")
+
+@app.post("/diagnostics/ping")
+def ping():
+    host = request.form["host"]
+    if not [[good]]HOST_RE.fullmatch(host)[[/good]]:
+        abort(400, "Invalid host")
+    output = subprocess.run(
+        [[good]]["ping", "-c", "2", "--", host][[/good]],      # argv list, shell=False
+        capture_output=True, text=True, timeout=10,
+    )
+    return output.stdout</code></pre></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="learn-title">
+        <div class="panel-head"><h2 id="learn-title">How the attack works</h2></div>
+        <div class="panel-body prose">
+          <h3>Root cause</h3>
+          <p>Functions such as <code>system()</code>, <code>exec()</code> and <code>subprocess.run(..., shell=True)</code> pass a single string to a shell, which splits it into commands using metacharacters like <code>;</code>, <code>&amp;</code>, <code>|</code>, <code>$( )</code>, backticks and newlines. When user input is part of that string, the user decides which commands run.</p>
+          <h3>Impact</h3>
+          <ul>
+            <li>Full remote code execution with the privileges of the web application.</li>
+            <li>Theft of source code, secrets and environment variables.</li>
+            <li>Lateral movement into internal networks, reverse shells and persistence.</li>
+          </ul>
+          <h3>Why the Medium fix fails</h3>
+          <p>POSIX shells have many ways to start a command. Blocking <code>;</code>, <code>&amp;&amp;</code> and <code>|</code> still leaves <code>&amp;</code>, newlines (<code>%0a</code>), <code>$(command)</code> and <code>`command`</code>. Blocklists can't keep up with a full programming language.</p>
+          <h3>Remediation</h3>
+          <ul>
+            <li>Prefer a library API to shelling out. Use a socket or ICMP library rather than calling <code>ping</code>.</li>
+            <li>If you must run a program, pass an argument array with <code>shell=False</code> (<code>execFile</code> in Node, <code>ProcessBuilder</code> in Java), and use <code>--</code> to end option parsing.</li>
+            <li>Validate input against a strict allowlist pattern before using it.</li>
+            <li>Run the service with minimal privileges and in a sandbox (container, seccomp, no outbound network).</li>
+          </ul>
+          <h3>References</h3>
+          <ul class="ref-list">
+            <li><a class="badge" href="https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP OS Command Injection Defense</a></li>
+            <li><a class="badge" href="https://portswigger.net/web-security/os-command-injection" target="_blank" rel="noopener">PortSwigger: OS command injection</a></li>
+            <li><a class="badge" href="https://cwe.mitre.org/data/definitions/78.html" target="_blank" rel="noopener">CWE-78</a></li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="site-footer"></div>
+
+  <script src="../assets/js/core.js"></script>
+  <script src="../assets/js/labs/vfs.js"></script>
+  <script src="../assets/js/labs/command-injection.js"></script>
+</body>
+</html>

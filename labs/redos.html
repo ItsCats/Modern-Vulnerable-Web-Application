@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Denial of Service (ReDoS) · MVWA</title>
+  <meta name="description" content="Hands-on ReDoS lab: freeze a single-threaded server with one crafted input through catastrophic regular expression backtracking, measure the exponential blow-up, and fix it with a linear-time pattern.">
+  <meta name="theme-color" content="#0b1017">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23121821'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='14' font-weight='700' fill='%233cc9b4' text-anchor='middle'%3Emv%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body data-root="../" data-page="lab">
+  <div id="site-header"></div>
+
+  <div class="container lab-layout">
+    <aside id="lab-sidebar" class="lab-sidebar" aria-label="All labs"></aside>
+
+    <main id="main">
+      <div id="lab-head" class="lab-head"></div>
+      <section id="level-control" class="panel" aria-label="Security level"></section>
+
+      <section class="panel" aria-labelledby="lab-title">
+        <div class="panel-head">
+          <h2 id="lab-title">Target: Pulse sign-up API</h2>
+          <span class="badge mono">Node.js · single event loop</span>
+        </div>
+        <div class="panel-body">
+          <p>Pulse validates email addresses with a regular expression before creating an account. Node.js runs JavaScript on a single thread, so while one regex is running, every other request waits. Here the server's regex runs in a Web Worker, which keeps your tab responsive and kills any request that takes longer than <strong>4 seconds</strong>.</p>
+
+          <div class="split keep">
+            <div class="browser">
+              <div class="browser-bar"><span class="lights"><i></i><i></i><i></i></span><span class="url">https://<b>pulse.app.test</b>/signup</span></div>
+              <div class="browser-body">
+                <form id="signup-form" autocomplete="off">
+                  <div class="field">
+                    <label for="email">Email address</label>
+                    <input class="input mono" id="email" value="alex@example.com" spellcheck="false">
+                  </div>
+                  <button class="btn btn-primary" type="submit" id="signup-btn">Create account</button>
+                </form>
+                <div id="signup-result" class="result-box" data-placeholder="Submit the form to call the server." style="margin-top:1rem"></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="label">Server health</div>
+              <div class="panel" style="box-shadow:none;margin-bottom:1rem">
+                <div class="panel-body">
+                  <div class="field-row" style="justify-content:space-between;align-items:center;margin-bottom:.6rem">
+                    <span class="badge badge-ok" id="health-badge"><span class="dot"></span>Event loop idle</span>
+                    <span class="mono muted" id="health-ms" style="font-size:13px">0 ms</span>
+                  </div>
+                  <div class="meter" aria-hidden="true"><i id="health-meter"></i></div>
+                  <dl class="kv" style="margin:.9rem 0 0">
+                    <dt>Last request</dt><dd id="kv-last">—</dd>
+                    <dt>Requests stalled*</dt><dd id="kv-stalled">0</dd>
+                  </dl>
+                  <p class="muted" style="font-size:12px;margin:.6rem 0 0">* Other users' requests queued behind this one, at 200 requests per second.</p>
+                </div>
+              </div>
+              <div class="label">Payload builder</div>
+              <div class="field-row">
+                <div class="grow">
+                  <label for="payload-n" class="sr-only">Number of characters</label>
+                  <div class="input-group"><span class="addon">"a" ×</span><input class="input mono" id="payload-n" type="number" min="1" max="60" value="26"><span class="addon">+ "!"</span></div>
+                </div>
+                <button type="button" class="btn btn-secondary" id="payload-fill">Use payload</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:1.5rem">
+            <div class="field-row" style="justify-content:space-between;align-items:center;margin-bottom:.5rem">
+              <div>
+                <h3 style="margin:0">Validation time by input length</h3>
+                <p class="muted" style="margin:.15rem 0 0;font-size:13.5px">Inputs of <span class="mono">"a" × n + "!"</span> at the current security level, in milliseconds.</p>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="bench-btn">Run benchmark</button>
+            </div>
+            <div class="chart" id="chart"><div class="chart-tip" id="chart-tip"></div></div>
+            <details class="hint"><summary>Show data table</summary><div><div class="table-wrap" style="margin-top:.5rem"><table class="data"><thead><tr><th>Length</th><th style="text-align:right">Time</th><th>Result</th></tr></thead><tbody id="bench-table"><tr><td colspan="3" class="muted">Run the benchmark to collect data.</td></tr></tbody></table></div></div></details>
+          </div>
+        </div>
+      </section>
+
+      <section id="objectives" class="panel"></section>
+
+      <section class="panel" aria-labelledby="code-title">
+        <div class="panel-head">
+          <h2 id="code-title">Server-side implementation</h2>
+          <span class="badge mono">routes/signup.js</span>
+        </div>
+        <div class="panel-body">
+          <div data-show-level="low">
+            <p>The local part <code>([a-zA-Z0-9_.-]+)+</code> nests one quantifier inside another. When the match fails, the engine tries every way of splitting the input between the inner and outer loops: 2<sup>n</sup> combinations.</p>
+            <div class="code-card"><div class="code-card-head"><span>Low · vulnerable</span><span>Node.js</span></div>
+<pre><code data-lang="js">const EMAIL_RE = /^[[bad]]([a-zA-Z0-9_.-]+)+[[/bad]]@([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/;
+
+app.post("/signup", (req, res) =&gt; {
+  if (![[bad]]EMAIL_RE.test(req.body.email)[[/bad]]) {         // blocks the event loop
+    return res.status(400).json({ error: "Invalid email" });
+  }
+  createAccount(req.body);
+  res.status(201).end();
+});</code></pre></div>
+          </div>
+          <div data-show-level="medium">
+            <p>A maximum length was added to stop the attack. Because the cost doubles with every character, 32 characters are still enough to stall the server for seconds.</p>
+            <div class="code-card"><div class="code-card-head"><span>Medium · weak mitigation</span><span>Node.js</span></div>
+<pre><code data-lang="js">const EMAIL_RE = /^([a-zA-Z0-9_.-]+)+@([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/;
+
+app.post("/signup", (req, res) =&gt; {
+  const email = String(req.body.email);
+  if ([[bad]]email.length &gt; 32[[/bad]]) return res.status(400).json({ error: "Email too long" });
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: "Invalid email" });
+  createAccount(req.body);
+  res.status(201).end();
+});</code></pre></div>
+          </div>
+          <div data-show-level="high">
+            <p>The pattern has no nested or overlapping quantifiers, so it runs in linear time. A sensible length cap (RFC 5321 allows 254 characters) bounds the work anyway. For untrusted patterns, use a linear-time engine such as RE2.</p>
+            <div class="code-card"><div class="code-card-head"><span>High · secure</span><span>Node.js</span></div>
+<pre><code data-lang="js">const EMAIL_RE = /^[[good]][a-zA-Z0-9_.-]+[[/good]]@(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/;   // no nested quantifiers
+
+app.post("/signup", (req, res) =&gt; {
+  const email = String(req.body.email);
+  if ([[good]]email.length &gt; 254[[/good]] || !EMAIL_RE.test(email)) {
+    return res.status(400).json({ error: "Invalid email" });
+  }
+  createAccount(req.body);
+  res.status(201).end();
+});</code></pre></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="learn-title">
+        <div class="panel-head"><h2 id="learn-title">How the attack works</h2></div>
+        <div class="panel-body prose">
+          <h3>Root cause</h3>
+          <p>JavaScript, Python, Java and .NET use backtracking regex engines. If a pattern can match the same text in many different ways, as with nested quantifiers like <code>(a+)+</code> or overlapping alternatives like <code>(a|a)*</code>, a nearly-matching input that ultimately fails makes the engine explore every possibility. The work grows exponentially with input length.</p>
+          <h3>Impact</h3>
+          <ul>
+            <li>One small request can pin a CPU core for seconds or minutes.</li>
+            <li>On single-threaded runtimes such as Node.js, every other user's request stalls until it finishes.</li>
+            <li>Real incidents include Cloudflare's 2019 global outage and Stack Overflow's 2016 outage.</li>
+          </ul>
+          <h3>Why the Medium fix fails</h3>
+          <p>Length limits treat the symptom. Because each extra character doubles the work, the limit would have to be very short to be safe, short enough to reject legitimate input. The vulnerable pattern is still there, and a faster attacker loop or a slightly longer limit brings the outage back.</p>
+          <h3>Remediation</h3>
+          <ul>
+            <li>Rewrite patterns to avoid nested and overlapping quantifiers, and use possessive quantifiers or atomic groups where the engine supports them.</li>
+            <li>Use a linear-time engine (RE2, Rust <code>regex</code>, or the <code>re2</code> package in Node) for complex or user-supplied patterns.</li>
+            <li>Cap input length before matching, and set execution time limits where the platform supports them (.NET <code>matchTimeout</code>).</li>
+            <li>Lint for vulnerable patterns in CI with tools such as <code>eslint-plugin-regexp</code> or <code>safe-regex</code>.</li>
+          </ul>
+          <h3>References</h3>
+          <ul class="ref-list">
+            <li><a class="badge" href="https://owasp.org/www-community/attacks/Regular_expression_Denial_of_Service_-_ReDoS" target="_blank" rel="noopener">OWASP: ReDoS</a></li>
+            <li><a class="badge" href="https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-july-2-2019/" target="_blank" rel="noopener">Cloudflare outage post-mortem</a></li>
+            <li><a class="badge" href="https://cwe.mitre.org/data/definitions/1333.html" target="_blank" rel="noopener">CWE-1333</a></li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="site-footer"></div>
+
+  <script src="../assets/js/core.js"></script>
+  <script src="../assets/js/labs/redos.js"></script>
+</body>
+</html>

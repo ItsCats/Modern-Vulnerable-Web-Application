@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Insecure Direct Object Reference · MVWA</title>
+  <meta name="description" content="Hands-on IDOR lab: tamper with REST API identifiers to access other customers' invoices and an administrator's API key, then fix it with object-level authorization.">
+  <meta name="theme-color" content="#0b1017">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23121821'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='14' font-weight='700' fill='%233cc9b4' text-anchor='middle'%3Emv%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body data-root="../" data-page="lab">
+  <div id="site-header"></div>
+
+  <div class="container lab-layout">
+    <aside id="lab-sidebar" class="lab-sidebar" aria-label="All labs"></aside>
+
+    <main id="main">
+      <div id="lab-head" class="lab-head"></div>
+      <section id="level-control" class="panel" aria-label="Security level"></section>
+
+      <section class="panel" aria-labelledby="lab-title">
+        <div class="panel-head">
+          <h2 id="lab-title">Target: Ledgerly invoicing API</h2>
+          <span class="badge mono">Authorization: Bearer &lt;jdoe&gt;</span>
+        </div>
+        <div class="panel-body">
+          <p>You are signed in to Ledgerly as <strong>Jamie Doe</strong> (<span class="mono">user 1042</span>), an ordinary customer. The web app calls a REST API to load your invoices. Intercept and change those calls, the way you would with Burp Suite or your browser's developer tools.</p>
+
+          <div class="split keep">
+            <div>
+              <div class="browser">
+                <div class="browser-bar"><span class="lights"><i></i><i></i><i></i></span><span class="url">https://<b>app.ledgerly.test</b>/billing</span></div>
+                <div class="browser-body">
+                  <div class="field-row" style="justify-content:space-between;align-items:center;margin-bottom:.75rem">
+                    <h3 style="margin:0">My invoices</h3>
+                    <button type="button" class="btn btn-secondary btn-sm" id="my-profile">View my profile</button>
+                  </div>
+                  <div class="table-wrap"><table class="data"><thead><tr><th>Invoice</th><th>Date</th><th style="text-align:right">Total</th><th></th></tr></thead><tbody id="my-invoices"></tbody></table></div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <form id="api-form" autocomplete="off">
+                <label for="api-path">Request</label>
+                <div class="input-group">
+                  <span class="addon">GET</span>
+                  <input class="input mono" id="api-path" value="/api/invoices/" spellcheck="false">
+                  <button class="btn btn-primary" type="submit">Send</button>
+                </div>
+              </form>
+              <div class="label" style="margin-top:1rem">Response</div>
+              <div class="http" id="api-response" aria-live="polite"><span class="hdr"># Click "View" on an invoice, or write your own request.</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="objectives" class="panel"></section>
+
+      <section class="panel" aria-labelledby="code-title">
+        <div class="panel-head">
+          <h2 id="code-title">Server-side implementation</h2>
+          <span class="badge mono">routes/api.js</span>
+        </div>
+        <div class="panel-body">
+          <div data-show-level="low">
+            <p>The handlers check that the caller is authenticated, but never that they are <em>authorised</em> for the object they asked for. Whole database records are serialised into the response.</p>
+            <div class="code-card"><div class="code-card-head"><span>Low · vulnerable</span><span>Node.js</span></div>
+<pre><code data-lang="js">app.get("/api/invoices/:id", requireAuth, async (req, res) =&gt; {
+  const invoice = await Invoice.findById([[bad]]req.params.id[[/bad]]);    // any id, any owner
+  if (!invoice) return res.sendStatus(404);
+  res.json(invoice);
+});
+
+app.get("/api/users/:id", requireAuth, async (req, res) =&gt; {
+  res.json([[bad]]await User.findById(req.params.id)[[/bad]]);               // includes api_key
+});</code></pre></div>
+          </div>
+          <div data-show-level="medium">
+            <p>Sequential IDs were judged "too guessable", so the API now uses encoded references. The encoding is plain base64 and there is still no ownership check.</p>
+            <div class="code-card"><div class="code-card-head"><span>Medium · weak mitigation</span><span>Node.js</span></div>
+<pre><code data-lang="js">// "Opaque" references: base64("invoice:5002")
+const decodeRef = ref =&gt; [[bad]]Buffer.from(ref, "base64").toString()[[/bad]].split(":");
+
+app.get("/api/invoices/:ref", requireAuth, async (req, res) =&gt; {
+  const [type, id] = decodeRef(req.params.ref);
+  if (type !== "invoice") return res.status(400).json({ error: "Invalid reference" });
+  res.json(await Invoice.findById(id));                     // still no owner check
+});</code></pre></div>
+          </div>
+          <div data-show-level="high">
+            <p>Every lookup is scoped to the authenticated user. Objects you don't own return <code>404</code>, so the API doesn't even reveal which IDs exist. Responses go through an explicit DTO that never includes secrets.</p>
+            <div class="code-card"><div class="code-card-head"><span>High · secure</span><span>Node.js</span></div>
+<pre><code data-lang="js">app.get("/api/invoices/:id", requireAuth, async (req, res) =&gt; {
+  const invoice = await Invoice.findOne({ id: req.params.id, [[good]]ownerId: req.user.id[[/good]] });
+  if (!invoice) return res.sendStatus(404);
+  res.json(toInvoiceDto(invoice));
+});
+
+app.get("/api/users/:id", requireAuth, async (req, res) =&gt; {
+  if ([[good]]req.params.id !== req.user.id &amp;&amp; !req.user.can("users:read")[[/good]]) return res.sendStatus(404);
+  res.json(toPublicUserDto(await User.findById(req.params.id)));   // no api_key
+});</code></pre></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="learn-title">
+        <div class="panel-head"><h2 id="learn-title">How the attack works</h2></div>
+        <div class="panel-body prose">
+          <h3>Root cause</h3>
+          <p>An IDOR exists when an application uses an identifier supplied by the client to fetch an object, and doesn't check that the current user is allowed to access that object. Authentication answers <em>who are you?</em>, while authorization answers <em>may you touch this?</em>. IDOR is a missing authorization check. It is the most common way Broken Access Control, number one in the OWASP Top 10, shows up in APIs, where it is also called BOLA (API1:2023).</p>
+          <h3>Impact</h3>
+          <ul>
+            <li>Horizontal privilege escalation: reading or changing other users' data.</li>
+            <li>Vertical privilege escalation: reaching admin-only records or credentials.</li>
+            <li>Mass data exposure, because sequential IDs make it trivial to enumerate every record.</li>
+          </ul>
+          <h3>Why the Medium fix fails</h3>
+          <p>Encoding is not access control. Base64, hex and hashes of predictable values can all be reversed or recomputed in seconds. Even random UUIDs only make guessing harder: they leak through URLs, logs and shared links, and they leave the actual authorization flaw in place.</p>
+          <h3>Remediation</h3>
+          <ul>
+            <li>Enforce object-level authorization on every request, server-side, ideally in a central policy layer rather than ad hoc in each handler.</li>
+            <li>Scope database queries to the current user or tenant (<code>WHERE owner_id = ?</code>).</li>
+            <li>Return explicit DTOs and never serialise whole records, so secrets are never sent by accident.</li>
+            <li>Write automated tests that request other users' objects with each role and expect a denial.</li>
+          </ul>
+          <h3>References</h3>
+          <ul class="ref-list">
+            <li><a class="badge" href="https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html" target="_blank" rel="noopener">OWASP IDOR Prevention Cheat Sheet</a></li>
+            <li><a class="badge" href="https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/" target="_blank" rel="noopener">OWASP API1:2023 BOLA</a></li>
+            <li><a class="badge" href="https://cwe.mitre.org/data/definitions/639.html" target="_blank" rel="noopener">CWE-639</a></li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="site-footer"></div>
+
+  <script src="../assets/js/core.js"></script>
+  <script src="../assets/js/labs/idor.js"></script>
+</body>
+</html>

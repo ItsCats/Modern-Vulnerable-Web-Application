@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Path Traversal · MVWA</title>
+  <meta name="description" content="Hands-on path traversal lab: escape a file-download directory to read /etc/passwd and application secrets, bypass naive ../ filters, and fix it with canonicalisation and containment checks.">
+  <meta name="theme-color" content="#0b1017">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23121821'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='14' font-weight='700' fill='%233cc9b4' text-anchor='middle'%3Emv%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="../assets/css/styles.css">
+</head>
+<body data-root="../" data-page="lab">
+  <div id="site-header"></div>
+
+  <div class="container lab-layout">
+    <aside id="lab-sidebar" class="lab-sidebar" aria-label="All labs"></aside>
+
+    <main id="main">
+      <div id="lab-head" class="lab-head"></div>
+      <section id="level-control" class="panel" aria-label="Security level"></section>
+
+      <section class="panel" aria-labelledby="lab-title">
+        <div class="panel-head">
+          <h2 id="lab-title">Target: Contoso Docs</h2>
+          <span class="badge mono">BASE_DIR = /var/www/docs/files</span>
+        </div>
+        <div class="panel-body">
+          <p>Contoso's document portal serves files with <span class="mono">GET /download?file=&lt;name&gt;</span>. The server joins the name onto its files directory and streams back whatever it finds. Edit the <span class="mono">file</span> parameter just as you would in a browser address bar. It is URL-decoded once, as a web framework would do it.</p>
+
+          <div class="browser">
+            <div class="browser-bar"><span class="lights"><i></i><i></i><i></i></span><span class="url">https://<b>docs.contoso.test</b>/download</span></div>
+            <div class="browser-body">
+              <div class="split keep">
+                <div>
+                  <div class="label">Shared documents</div>
+                  <div class="table-wrap"><table class="data"><thead><tr><th>Name</th><th style="text-align:right">Size</th><th></th></tr></thead><tbody id="file-list"></tbody></table></div>
+                </div>
+                <form id="dl-form" autocomplete="off">
+                  <label for="dl-file">Request URL</label>
+                  <div class="input-group">
+                    <span class="addon">/download?file=</span>
+                    <input class="input mono" id="dl-file" value="employee-handbook.txt" spellcheck="false">
+                    <button class="btn btn-primary" type="submit">Fetch</button>
+                  </div>
+                  <p class="muted" style="font-size:12.5px;margin:.5rem 0 0">Resolved path: <span class="mono" id="resolved-path">—</span></p>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:1.25rem">
+            <div class="label">Response</div>
+            <div class="http" id="dl-response" aria-live="polite"><span class="hdr"># Download a document, or tamper with the file parameter.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="objectives" class="panel"></section>
+
+      <section class="panel" aria-labelledby="code-title">
+        <div class="panel-head">
+          <h2 id="code-title">Server-side implementation</h2>
+          <span class="badge mono">routes/download.js</span>
+        </div>
+        <div class="panel-body">
+          <div data-show-level="low">
+            <p><code>path.join</code> resolves <code>..</code> segments, so a name like <code>../../../etc/passwd</code> walks out of the base directory. Error messages leak absolute paths, which tells the attacker how deep the base directory is.</p>
+            <div class="code-card"><div class="code-card-head"><span>Low · vulnerable</span><span>Node.js</span></div>
+<pre><code data-lang="js">const BASE_DIR = "/var/www/docs/files";
+
+app.get("/download", (req, res) =&gt; {
+  const target = [[bad]]path.join(BASE_DIR, req.query.file)[[/bad]];
+  fs.readFile(target, (err, data) =&gt; {
+    if (err) return res.status(err.code === "ENOENT" ? 404 : 500).send([[bad]]err.message[[/bad]]);
+    res.type("text/plain").send(data);
+  });
+});</code></pre></div>
+          </div>
+          <div data-show-level="medium">
+            <p>The developer strips <code>../</code> from the input and, to handle file names that were encoded twice, decodes them again afterwards. Both steps are mistakes.</p>
+            <div class="code-card"><div class="code-card-head"><span>Medium · weak mitigation</span><span>Node.js</span></div>
+<pre><code data-lang="js">app.get("/download", (req, res) =&gt; {
+  // Remove directory traversal sequences
+  const cleaned = req.query.file[[bad]].replaceAll("../", "")[[/bad]];        // non-recursive
+  const name = [[bad]]decodeURIComponent(cleaned)[[/bad]];                     // decoded AFTER filtering
+  const target = path.join(BASE_DIR, name);
+  fs.readFile(target, (err, data) =&gt; {
+    if (err) return res.status(404).send(err.message);
+    res.type("text/plain").send(data);
+  });
+});</code></pre></div>
+          </div>
+          <div data-show-level="high">
+            <p>The input is canonicalised once with <code>path.resolve</code>, and the result must stay inside the base directory. Better still, files are looked up by ID in a database so user input never reaches the file system.</p>
+            <div class="code-card"><div class="code-card-head"><span>High · secure</span><span>Node.js</span></div>
+<pre><code data-lang="js">const BASE_DIR = path.resolve("/var/www/docs/files");
+
+app.get("/download", async (req, res) =&gt; {
+  const name = String(req.query.file ?? "");
+  if (name.includes("\0")) return res.sendStatus(400);
+  const target = [[good]]path.resolve(BASE_DIR, name)[[/good]];
+  if ([[good]]!target.startsWith(BASE_DIR + path.sep)[[/good]]) return res.sendStatus(404);
+  const real = await fs.promises.realpath(target).catch(() =&gt; null);  // defeat symlinks
+  if (!real || [[good]]!real.startsWith(BASE_DIR + path.sep)[[/good]]) return res.sendStatus(404);
+  res.type("text/plain").sendFile(real);
+});</code></pre></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="learn-title">
+        <div class="panel-head"><h2 id="learn-title">How the attack works</h2></div>
+        <div class="panel-body prose">
+          <h3>Root cause</h3>
+          <p>When a file path is built from user input, the special segment <code>..</code> ("parent directory") lets the input climb out of the intended folder. The application's own permissions then decide what can be read, and a web server can usually read its source code, configuration and many system files.</p>
+          <h3>Impact</h3>
+          <ul>
+            <li>Disclosure of credentials in <code>.env</code> files, cloud keys and database connection strings.</li>
+            <li>Source code disclosure, which makes every other bug easier to find.</li>
+            <li>Account and host enumeration through files like <code>/etc/passwd</code>.</li>
+            <li>Remote code execution where traversal applies to uploads or writes (Zip Slip, log poisoning).</li>
+          </ul>
+          <h3>Why the Medium fix fails</h3>
+          <p>Stripping <code>../</code> in a single pass turns <code>....//</code> back into <code>../</code>. Decoding after validating means <code>%2e%2e%2f</code> passes the filter and becomes <code>../</code> afterwards. Validate the <em>final, canonical</em> path, never the raw input.</p>
+          <h3>Remediation</h3>
+          <ul>
+            <li>Avoid passing user input to file system APIs at all: map an ID or an allowlisted name to a path.</li>
+            <li>Otherwise decode once, canonicalise (<code>path.resolve</code> plus <code>realpath</code>) and check the result is inside the base directory.</li>
+            <li>Run the service as a low-privilege user, and keep secrets out of the web root. A secrets manager is better than a <code>.env</code> file.</li>
+            <li>Return generic errors that don't reveal absolute paths.</li>
+          </ul>
+          <h3>References</h3>
+          <ul class="ref-list">
+            <li><a class="badge" href="https://owasp.org/www-community/attacks/Path_Traversal" target="_blank" rel="noopener">OWASP: Path Traversal</a></li>
+            <li><a class="badge" href="https://portswigger.net/web-security/file-path-traversal" target="_blank" rel="noopener">PortSwigger: File path traversal</a></li>
+            <li><a class="badge" href="https://cwe.mitre.org/data/definitions/22.html" target="_blank" rel="noopener">CWE-22</a></li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="site-footer"></div>
+
+  <script src="../assets/js/core.js"></script>
+  <script src="../assets/js/labs/vfs.js"></script>
+  <script src="../assets/js/labs/path-traversal.js"></script>
+</body>
+</html>
