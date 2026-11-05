@@ -72,31 +72,27 @@
     return input.replace(/OR|UNION|SELECT|--/g, "");
   }
 
-  // Runs a query and returns { columns, rows, error }.
+  // Runs a query and returns { columns, rows, error }. Mirrors better-sqlite3:
+  // db.prepare(sql) compiles exactly one statement and rejects anything more.
   function runQuery(level, parts, params) {
     try {
-      if (level === "high") {
-        var stmt = db.prepare(parts.sql);
-        stmt.bind(params);
-        var rows = [];
-        while (stmt.step()) rows.push(stmt.get());
-        var cols = stmt.getColumnNames();
+      var it = db.iterateStatements(parts.sql);
+      var first = it.next();
+      if (first.done) throw new RangeError("The supplied SQL string contains no statements");
+      var stmt = first.value;
+      // Anything left after the first statement, other than comments and ';', is a second statement.
+      var rest = (it.getRemainingSQL() || "")
+        .replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?(\*\/|$)/g, "").replace(/[;\s]+/g, "");
+      if (rest) {
         stmt.free();
-        return { columns: cols, rows: rows };
+        throw new RangeError("The supplied SQL string contains more than one statement");
       }
-      if (level === "low") {
-        // Stacked statements allowed (like mysql's multipleStatements: true).
-        var results = db.exec(parts.sql);
-        var first = results[0];
-        return first ? { columns: first.columns, rows: first.values } : { columns: [], rows: [] };
-      }
-      // medium: only the first statement is compiled and executed.
-      var s = db.prepare(parts.sql);
-      var out = [];
-      while (s.step()) out.push(s.get());
-      var c = s.getColumnNames();
-      s.free();
-      return { columns: c, rows: out };
+      if (level === "high") stmt.bind(params);
+      var rows = [];
+      while (stmt.step()) rows.push(stmt.get());
+      var cols = stmt.getColumnNames();
+      stmt.free();
+      return { columns: cols, rows: rows };
     } catch (e) {
       return { error: e.message || String(e), columns: [], rows: [] };
     }
@@ -232,8 +228,8 @@
   M.initLab({
     id: "sql-injection",
     levels: {
-      low: "Queries are built by string concatenation, stacked statements are allowed and raw database errors are shown to the user.",
-      medium: "A case-sensitive blocklist strips OR, UNION, SELECT and -- from input, and only the first statement is executed. Queries are still concatenated.",
+      low: "Queries are built by string concatenation, and raw database errors are shown to the user.",
+      medium: "A case-sensitive blocklist strips OR, UNION, SELECT and -- from input. Queries are still built by concatenation.",
       high: "Every query is a prepared statement with bound parameters. Errors are generic. Your payloads are treated as plain data."
     },
     hints: [

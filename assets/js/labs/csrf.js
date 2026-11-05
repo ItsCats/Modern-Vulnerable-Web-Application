@@ -184,7 +184,19 @@
       var method = (form.getAttribute("method") || "GET").toUpperCase() === "POST" ? "POST" : "GET";
       var data = {};
       Array.prototype.forEach.call(form.querySelectorAll("input[name], select[name], textarea[name]"), function (inp) {
-        data[inp.getAttribute("name")] = inp.getAttribute("value") || inp.textContent || "";
+        var tag = inp.tagName.toLowerCase(), type = (inp.getAttribute("type") || "").toLowerCase();
+        if (tag === "input" && /^(submit|button|reset|image|file)$/.test(type)) return;
+        if (tag === "input" && /^(checkbox|radio)$/.test(type) && !inp.hasAttribute("checked")) return;
+        var value;
+        if (tag === "select") {
+          var opt = inp.querySelector("option[selected]") || inp.querySelector("option");
+          value = opt ? (opt.hasAttribute("value") ? opt.getAttribute("value") : opt.textContent.trim()) : "";
+        } else if (tag === "textarea") {
+          value = inp.textContent;
+        } else {
+          value = inp.getAttribute("value") || "";
+        }
+        data[inp.getAttribute("name")] = value;
       });
       var abs;
       try { abs = new URL(action, pageUrl); } catch (e) { return; }
@@ -248,7 +260,7 @@
     hints: [
       '<details class="hint"><summary>Hint: first forged transfer</summary><div><p>The example payload is ready to go. Click <em>Victim opens this page</em> and watch the bank\'s request log.</p></div></details>',
       '<details class="hint"><summary>Hint: zero-click GET</summary><div><p>On Low the endpoint reads parameters from the query string too. Load the <em>Zero-click GET</em> example: an <code>&lt;img&gt;</code> tag is enough.</p></div></details>',
-      '<details class="hint"><summary>Hint: beating the Referer check</summary><div><p>Modern browsers send only the origin cross-site, so you have to control the host name. You can register <code>bank.harbor.test.attacker.test</code>, or remove the header entirely with <code>&lt;meta name="referrer" content="no-referrer"&gt;</code>.</p></div></details>'
+      '<details class="hint"><summary>Hint: beating the Referer check</summary><div><p>By default, browsers send only the origin on cross-site requests, so the host name is what the check sees. Register a host such as <code>bank.harbor.test.attacker.test</code>, or remove the header entirely with <code>&lt;meta name="referrer" content="no-referrer"&gt;</code>.</p></div></details>'
     ].join("")
   });
 })();

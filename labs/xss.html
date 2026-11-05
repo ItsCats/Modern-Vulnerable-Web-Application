@@ -6,6 +6,8 @@
   <title>Cross-Site Scripting · MVWA</title>
   <meta name="description" content="Hands-on cross-site scripting lab: reflected and stored XSS, filter evasion and session cookie theft, with output encoding, CSP and HttpOnly as the fix.">
   <meta name="theme-color" content="#0b1017">
+  <!-- Backstop for the lab sandbox: payloads may run inline script, but cannot reach other hosts. -->
+  <meta http-equiv="Content-Security-Policy" content="connect-src 'self'; img-src 'self' data:; media-src 'self'; frame-src 'none'; object-src 'none'; form-action 'self'; base-uri 'self'">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23121821'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='14' font-weight='700' fill='%233cc9b4' text-anchor='middle'%3Emv%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,14 +30,14 @@
           <span class="badge mono" title="Simulated cookie jar for the victim's session">Victim cookie: sessionid=<span id="cookie-mask">••••••••</span></span>
         </div>
         <div class="panel-body">
-          <p>You are attacking a shop's search page and its public guestbook. A customer is signed in on this page with a session cookie. Payloads really execute here; dialogs such as <code>alert()</code> are intercepted and logged instead of blocking the page, and outbound requests from your payload are captured rather than sent.</p>
+          <p>You are attacking a shop's search page and its public guestbook. A customer is signed in on this page with a session cookie. Payloads really execute here. Dialogs such as <code>alert()</code> are logged instead of blocking the page. Requests your payload makes to other hosts (<code>fetch</code>, XHR, beacons, images, WebSockets) are captured instead of sent, and a Content Security Policy blocks any other route out of the page.</p>
 
           <div class="split">
             <div class="browser">
               <div class="browser-bar"><span class="lights"><i></i><i></i><i></i></span><span class="url">https://<b>shop.northwind.test</b>/search?q=<span id="search-url"></span></span></div>
               <div class="browser-body">
                 <form id="search-form" autocomplete="off">
-                  <label for="search-q">Search the catalogue</label>
+                  <label for="search-q">Search the catalog</label>
                   <div class="input-group">
                     <input class="input mono" id="search-q" name="q" placeholder="e.g. hiking boots" spellcheck="false">
                     <button class="btn btn-primary" type="submit">Search</button>
@@ -148,11 +150,11 @@ res.cookie("sessionid", token, { [[good]]httpOnly: true, secure: true, sameSite:
             <li>Self-propagating worms on social platforms, through stored XSS.</li>
           </ul>
           <h3>Why the Medium fix fails</h3>
-          <p>Script tags are only one of dozens of execution vectors. Event-handler attributes (<code>onerror</code>, <code>ontoggle</code>, <code>onfocus</code>), <code>javascript:</code> URLs and SVG elements all run code without a <code>&lt;script&gt;</code> tag. Sanitising HTML correctly requires a real parser such as DOMPurify. A regular expression is not enough.</p>
+          <p>Script tags are only one of dozens of execution vectors. Event-handler attributes (<code>onerror</code>, <code>ontoggle</code>, <code>onfocus</code>), <code>javascript:</code> URLs and SVG elements all run code without a <code>&lt;script&gt;</code> tag. Sanitizing HTML correctly requires a real parser such as DOMPurify. A regular expression is not enough.</p>
           <h3>Remediation</h3>
           <ul>
-            <li>Encode output for its context (HTML body, attribute, URL, JavaScript). Prefer templating engines that auto-escape, and avoid <code>innerHTML</code> in favour of <code>textContent</code>.</li>
-            <li>If rich HTML is required, sanitise it with a maintained library (DOMPurify) and an allowlist.</li>
+            <li>Encode output for its context (HTML body, attribute, URL, JavaScript). Prefer templating engines that auto-escape, and avoid <code>innerHTML</code> in favor of <code>textContent</code>.</li>
+            <li>If rich HTML is required, sanitize it with a maintained library (DOMPurify) and an allowlist.</li>
             <li>Deploy a strict Content Security Policy (nonces or hashes, no <code>'unsafe-inline'</code>).</li>
             <li>Mark session cookies <code>HttpOnly</code>, <code>Secure</code> and <code>SameSite</code>.</li>
             <li>Use Trusted Types to lock down DOM sinks in large front-end codebases.</li>

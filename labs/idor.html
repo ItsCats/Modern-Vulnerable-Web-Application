@@ -68,7 +68,7 @@
         </div>
         <div class="panel-body">
           <div data-show-level="low">
-            <p>The handlers check that the caller is authenticated, but never that they are <em>authorised</em> for the object they asked for. Whole database records are serialised into the response.</p>
+            <p>The handlers check that the caller is authenticated, but never that they are <em>authorized</em> for the object they asked for. Whole database records are serialized into the response.</p>
             <div class="code-card"><div class="code-card-head"><span>Low · vulnerable</span><span>Node.js</span></div>
 <pre><code data-lang="js">app.get("/api/invoices/:id", requireAuth, async (req, res) =&gt; {
   const invoice = await Invoice.findById([[bad]]req.params.id[[/bad]]);    // any id, any owner
@@ -96,14 +96,17 @@ app.get("/api/invoices/:ref", requireAuth, async (req, res) =&gt; {
             <p>Every lookup is scoped to the authenticated user. Objects you don't own return <code>404</code>, so the API doesn't even reveal which IDs exist. Responses go through an explicit DTO that never includes secrets.</p>
             <div class="code-card"><div class="code-card-head"><span>High · secure</span><span>Node.js</span></div>
 <pre><code data-lang="js">app.get("/api/invoices/:id", requireAuth, async (req, res) =&gt; {
-  const invoice = await Invoice.findOne({ id: req.params.id, [[good]]ownerId: req.user.id[[/good]] });
+  const invoice = await Invoice.findOne({ id: Number(req.params.id), [[good]]ownerId: req.user.id[[/good]] });
   if (!invoice) return res.sendStatus(404);
   res.json(toInvoiceDto(invoice));
 });
 
 app.get("/api/users/:id", requireAuth, async (req, res) =&gt; {
-  if ([[good]]req.params.id !== req.user.id &amp;&amp; !req.user.can("users:read")[[/good]]) return res.sendStatus(404);
-  res.json(toPublicUserDto(await User.findById(req.params.id)));   // no api_key
+  const id = Number(req.params.id);
+  if ([[good]]id !== req.user.id &amp;&amp; !req.user.can("users:read")[[/good]]) return res.sendStatus(404);
+  const user = await User.findById(id);
+  if (!user) return res.sendStatus(404);
+  res.json(toPublicUserDto(user));                           // never includes api_key
 });</code></pre></div>
           </div>
         </div>
@@ -126,7 +129,7 @@ app.get("/api/users/:id", requireAuth, async (req, res) =&gt; {
           <ul>
             <li>Enforce object-level authorization on every request, server-side, ideally in a central policy layer rather than ad hoc in each handler.</li>
             <li>Scope database queries to the current user or tenant (<code>WHERE owner_id = ?</code>).</li>
-            <li>Return explicit DTOs and never serialise whole records, so secrets are never sent by accident.</li>
+            <li>Return explicit DTOs and never serialize whole records, so secrets are never sent by accident.</li>
             <li>Write automated tests that request other users' objects with each role and expect a denial.</li>
           </ul>
           <h3>References</h3>

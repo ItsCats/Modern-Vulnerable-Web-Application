@@ -28,7 +28,7 @@
           <span class="badge mono">web01 · www-data</span>
         </div>
         <div class="panel-body">
-          <p>NetDiag is an internal dashboard that lets support staff check whether a host is reachable. Behind the form, the server runs <span class="mono">ping</span> through the system shell. The shell here is simulated, but it parses separators, pipes, quoting and command substitution just as <span class="mono">/bin/sh</span> does.</p>
+          <p>NetDiag is an internal dashboard that lets support staff check whether a host is reachable. Behind the form, the server runs <span class="mono">ping</span> through the system shell. The shell here is simulated. It implements the parts of <span class="mono">/bin/sh</span> that matter for this attack: separators, pipes, quoting, variable expansion, command substitution and redirection.</p>
 
           <div class="browser">
             <div class="browser-bar"><span class="lights"><i></i><i></i><i></i></span><span class="url">https://<b>netdiag.internal.test</b>/diagnostics/ping</span></div>
@@ -112,7 +112,7 @@ def ping():
             <li>Lateral movement into internal networks, reverse shells and persistence.</li>
           </ul>
           <h3>Why the Medium fix fails</h3>
-          <p>POSIX shells have many ways to start a command. Blocking <code>;</code>, <code>&amp;&amp;</code> and <code>|</code> still leaves <code>&amp;</code>, newlines (<code>%0a</code>), <code>$(command)</code> and <code>`command`</code>. Blocklists can't keep up with a full programming language.</p>
+          <p>POSIX shells have many ways to start a command. Blocking <code>;</code>, <code>&amp;&amp;</code> and <code>|</code> still leaves <code>&amp;</code>, newlines (sent as <code>%0a</code> in a raw request), <code>$(command)</code> and <code>`command`</code>, and <code>${IFS}</code> can stand in for a space. Blocklists can't keep up with a full programming language.</p>
           <h3>Remediation</h3>
           <ul>
             <li>Prefer a library API to shelling out. Use a socket or ICMP library rather than calling <code>ping</code>.</li>

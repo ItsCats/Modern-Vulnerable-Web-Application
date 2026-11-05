@@ -88,7 +88,7 @@
     levels: {
       low: "The file name is joined onto the base directory with path.join and read directly. Errors expose absolute paths.",
       medium: "“../” is removed from the input in a single pass, and the result is URL-decoded a second time afterwards.",
-      high: "The path is canonicalised with path.resolve and must stay inside the base directory. Errors are generic."
+      high: "The path is canonicalized with path.resolve and must stay inside the base directory. Errors are generic."
     },
     hints: [
       '<details class="hint"><summary>Hint: reading /etc/passwd</summary><div><p>The base directory is four levels deep. Each <code>../</code> climbs one level: <code>../../../../etc/passwd</code>. Extra <code>../</code> segments are harmless at the root.</p></div></details>',

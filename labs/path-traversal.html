@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Path Traversal · MVWA</title>
-  <meta name="description" content="Hands-on path traversal lab: escape a file-download directory to read /etc/passwd and application secrets, bypass naive ../ filters, and fix it with canonicalisation and containment checks.">
+  <meta name="description" content="Hands-on path traversal lab: escape a file-download directory to read /etc/passwd and application secrets, bypass naive ../ filters, and fix it with canonicalization and containment checks.">
   <meta name="theme-color" content="#0b1017">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23121821'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='14' font-weight='700' fill='%233cc9b4' text-anchor='middle'%3Emv%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -41,7 +41,7 @@
                 <form id="dl-form" autocomplete="off">
                   <label for="dl-file">Request URL</label>
                   <div class="input-group">
-                    <span class="addon">/download?file=</span>
+                    <span class="addon"><span class="hide-xs">/download</span>?file=</span>
                     <input class="input mono" id="dl-file" value="employee-handbook.txt" spellcheck="false">
                     <button class="btn btn-primary" type="submit">Fetch</button>
                   </div>
@@ -67,7 +67,7 @@
         </div>
         <div class="panel-body">
           <div data-show-level="low">
-            <p><code>path.join</code> resolves <code>..</code> segments, so a name like <code>../../../etc/passwd</code> walks out of the base directory. Error messages leak absolute paths, which tells the attacker how deep the base directory is.</p>
+            <p><code>path.join</code> resolves <code>..</code> segments, so a name like <code>../../../../etc/passwd</code> walks out of the base directory. Error messages leak absolute paths, which tells the attacker how deep the base directory is.</p>
             <div class="code-card"><div class="code-card-head"><span>Low · vulnerable</span><span>Node.js</span></div>
 <pre><code data-lang="js">const BASE_DIR = "/var/www/docs/files";
 
@@ -94,7 +94,7 @@ app.get("/download", (req, res) =&gt; {
 });</code></pre></div>
           </div>
           <div data-show-level="high">
-            <p>The input is canonicalised once with <code>path.resolve</code>, and the result must stay inside the base directory. Better still, files are looked up by ID in a database so user input never reaches the file system.</p>
+            <p>The input is canonicalized once with <code>path.resolve</code>, and the result must stay inside the base directory. Better still, files are looked up by ID in a database so user input never reaches the file system.</p>
             <div class="code-card"><div class="code-card-head"><span>High · secure</span><span>Node.js</span></div>
 <pre><code data-lang="js">const BASE_DIR = path.resolve("/var/www/docs/files");
 
@@ -124,11 +124,11 @@ app.get("/download", async (req, res) =&gt; {
             <li>Remote code execution where traversal applies to uploads or writes (Zip Slip, log poisoning).</li>
           </ul>
           <h3>Why the Medium fix fails</h3>
-          <p>Stripping <code>../</code> in a single pass turns <code>....//</code> back into <code>../</code>. Decoding after validating means <code>%2e%2e%2f</code> passes the filter and becomes <code>../</code> afterwards. Validate the <em>final, canonical</em> path, never the raw input.</p>
+          <p>Stripping <code>../</code> in a single pass turns <code>....//</code> back into <code>../</code>. Decoding after validating means a double-encoded <code>%252e%252e%252f</code> passes the filter, because the framework's first decode only turns it into <code>%2e%2e%2f</code>, and the second decode then produces <code>../</code>. Validate the <em>final, canonical</em> path, never the raw input.</p>
           <h3>Remediation</h3>
           <ul>
             <li>Avoid passing user input to file system APIs at all: map an ID or an allowlisted name to a path.</li>
-            <li>Otherwise decode once, canonicalise (<code>path.resolve</code> plus <code>realpath</code>) and check the result is inside the base directory.</li>
+            <li>Otherwise decode once, canonicalize (<code>path.resolve</code> plus <code>realpath</code>) and check the result is inside the base directory.</li>
             <li>Run the service as a low-privilege user, and keep secrets out of the web root. A secrets manager is better than a <code>.env</code> file.</li>
             <li>Return generic errors that don't reveal absolute paths.</li>
           </ul>

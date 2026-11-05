@@ -144,39 +144,88 @@
   COMMANDS["/bin/ping"] = ping;
 
   /* ------------------------------------------------------------------
-   * Shell: command substitution, quoting, ; && || & | and newlines.
+   * Shell: quoting, $VAR / ${VAR}, $(...) and `...` substitution (with
+   * field splitting, never re-parsed as syntax), ; && || & |, and
+   * redirections (> >> < 2>&1). stdout and stderr are kept separate.
    * ---------------------------------------------------------------- */
-  function expandSubstitutions(src, depth) {
-    if (depth > 5) return src;
-    var changed = true;
-    while (changed) {
-      changed = false;
-      src = src.replace(/\$\(([^()]*)\)/, function (_, inner) { changed = true; return runScript(inner, depth + 1).out.replace(/\n+$/, "").replace(/\n/g, " "); });
-      src = src.replace(/`([^`]*)`/, function (_, inner) { changed = true; return runScript(inner, depth + 1).out.replace(/\n+$/, "").replace(/\n/g, " "); });
-    }
-    return src;
+  var VARS = { IFS: " \t\n" };
+  Object.keys(ENV).forEach(function (k) { VARS[k] = ENV[k]; });
+  var subErr = "";   // stderr produced inside command substitutions
+
+  function substitute(inner, depth) {
+    if (depth > 5) return "";
+    var r = runScript(inner, depth + 1);
+    subErr += r.err;
+    return r.out.replace(/\n+$/, "");
   }
 
-  // Tokenise into words and operators, honouring single and double quotes.
-  function tokenize(src) {
+  function parse(src, depth) {
     var tokens = [], word = "", inWord = false, quote = null;
     function push() { if (inWord) tokens.push({ w: word }); word = ""; inWord = false; }
+    function expansion(text) {
+      if (quote === '"') { word += text; inWord = true; return; }
+      text.split(/[ \t\n]+/).forEach(function (part, idx) {   // field splitting
+        if (idx > 0) push();
+        if (part) { word += part; inWord = true; }
+      });
+    }
+    function matchParen(from) {
+      var d = 1, q = null;
+      for (var j = from; j < src.length; j++) {
+        var ch = src[j];
+        if (q) { if (ch === q) q = null; continue; }
+        if (ch === "'" || ch === '"') { q = ch; continue; }
+        if (ch === "(") d++;
+        else if (ch === ")" && --d === 0) return j;
+      }
+      return -1;
+    }
     for (var i = 0; i < src.length; i++) {
       var c = src[i], n = src[i + 1];
-      if (quote) {
-        if (c === quote) quote = null; else word += c;
-        continue;
+      if (quote === "'") { if (c === "'") quote = null; else word += c; continue; }
+      if (c === "\\" && quote === '"' && /[$`"\\]/.test(n || "")) { word += n; i++; continue; }
+      if (c === "$" && n === "(") {
+        var close = matchParen(i + 2);
+        if (close === -1) return { error: 'sh: 1: Syntax error: end of file unexpected (expecting ")")' };
+        expansion(substitute(src.slice(i + 2, close), depth));
+        i = close; continue;
       }
+      if (c === "`") {
+        var endB = src.indexOf("`", i + 1);
+        if (endB === -1) return { error: "sh: 1: Syntax error: EOF in backquote substitution" };
+        expansion(substitute(src.slice(i + 1, endB), depth));
+        i = endB; continue;
+      }
+      if (c === "$" && n === "{") {
+        var endV = src.indexOf("}", i + 2);
+        if (endV === -1) return { error: "sh: 1: Syntax error: Missing '}'" };
+        expansion(VARS[src.slice(i + 2, endV)] || "");
+        i = endV; continue;
+      }
+      if (c === "$" && /[A-Za-z_]/.test(n || "")) {
+        var name = /^[A-Za-z_][A-Za-z0-9_]*/.exec(src.slice(i + 1))[0];
+        expansion(VARS[name] || "");
+        i += name.length; continue;
+      }
+      if (quote === '"') { if (c === '"') quote = null; else word += c; continue; }
       if (c === "'" || c === '"') { quote = c; inWord = true; continue; }
       if (c === "\\" && n !== undefined) { word += n; inWord = true; i++; continue; }
       if (c === " " || c === "\t") { push(); continue; }
       if (c === "\n" || c === ";") { push(); tokens.push({ op: ";" }); continue; }
       if (c === "&" && n === "&") { push(); tokens.push({ op: "&&" }); i++; continue; }
       if (c === "|" && n === "|") { push(); tokens.push({ op: "||" }); i++; continue; }
-      if (c === "&") { push(); tokens.push({ op: ";" }); continue; }   // background: treated as sequential
+      if (c === "&") { push(); tokens.push({ op: ";" }); continue; }        // background: run sequentially
       if (c === "|") { push(); tokens.push({ op: "|" }); continue; }
-      if (c === ">" || c === "<") { push(); tokens.push({ op: "redir" }); continue; }
-      if (c === "#" && !inWord) break;                                  // comment
+      if (c === ">" || c === "<") {
+        var fd = c === "<" ? 0 : 1;
+        if (inWord && /^\d$/.test(word)) { fd = Number(word); word = ""; inWord = false; } else push();
+        if (c === ">" && n === ">") i++;
+        var dup = /^&(\d)/.exec(src.slice(i + 1));
+        if (dup) { tokens.push({ op: "dup", fd: fd, to: Number(dup[1]) }); i += 2; continue; }
+        tokens.push({ op: "redir", fd: fd });
+        continue;
+      }
+      if (c === "#" && !inWord) { while (i + 1 < src.length && src[i + 1] !== "\n") i++; continue; }
       word += c; inWord = true;
     }
     if (quote) return { error: "sh: 1: Syntax error: Unterminated quoted string" };
@@ -184,54 +233,99 @@
     return { tokens: tokens };
   }
 
-  function runCommand(words, stdin) {
-    var name = words[0], args = words.slice(1);
-    var fn = Object.prototype.hasOwnProperty.call(COMMANDS, name) ? COMMANDS[name] : null;
-    if (!fn) return { out: "sh: 1: " + name + ": not found\n", code: 127 };
-    var r = fn(args, stdin);
-    if (r.code === 0) executed.push(name);
-    return r;
+  function build(tokens) {
+    var list = [], pipeline = [], cmd = { words: [], redirs: [] }, pending = null;
+    for (var i = 0; i < tokens.length; i++) {
+      var t = tokens[i];
+      if (t.w !== undefined) {
+        if (pending) { pending.target = t.w; cmd.redirs.push(pending); pending = null; }
+        else cmd.words.push(t.w);
+        continue;
+      }
+      if (pending) return { error: "sh: 1: Syntax error: redirection unexpected" };
+      if (t.op === "redir") { pending = { fd: t.fd }; continue; }
+      if (t.op === "dup") { cmd.redirs.push({ fd: t.fd, dup: t.to }); continue; }
+      pipeline.push(cmd);
+      cmd = { words: [], redirs: [] };
+      if (t.op === "|") continue;
+      list.push({ pipeline: pipeline, op: t.op });
+      pipeline = [];
+    }
+    if (pending) return { error: "sh: 1: Syntax error: newline unexpected" };
+    pipeline.push(cmd);
+    list.push({ pipeline: pipeline, op: null });
+    return { list: list };
   }
 
+  function runCommand(words, stdin) {
+    var name = words[0];
+    var fn = Object.prototype.hasOwnProperty.call(COMMANDS, name) ? COMMANDS[name] : null;
+    if (!fn) return { out: "", err: "sh: 1: " + name + ": not found\n", code: 127 };
+    var r = fn(words.slice(1), stdin);
+    if (r.code === 0) executed.push(name);
+    // Commands report failures as a single message: route it to stderr.
+    return r.code === 0 ? { out: r.out, err: "", code: 0 } : { out: "", err: r.out, code: r.code };
+  }
+
+  function execSimple(cmd, stdin) {
+    var table = { 1: "out", 2: "err" };
+    for (var i = 0; i < cmd.redirs.length; i++) {
+      var rd = cmd.redirs[i];
+      if (rd.dup !== undefined) { table[rd.fd] = table[rd.dup] || "out"; continue; }
+      var target = fs.resolve(CWD, rd.target);
+      if (rd.fd === 0) {
+        var st = fs.stat(target);
+        if (!st || st.type !== "file" || !st.readable) return { out: "", err: "sh: 1: cannot open " + rd.target + ": " + (st ? "Permission denied" : "No such file") + "\n", code: 2 };
+        stdin = fs.read(target);
+        continue;
+      }
+      if (target !== "/dev/null" && target.indexOf("/tmp/") !== 0) return { out: "", err: "sh: 1: cannot create " + rd.target + ": Permission denied\n", code: 2 };
+      table[rd.fd] = "null";
+    }
+    if (!cmd.words.length) return { out: "", err: "", code: 0 };
+    var r = runCommand(cmd.words, stdin);
+    var res = { out: "", err: "", code: r.code };
+    if (table[1] !== "null") res[table[1]] += r.out;
+    if (table[2] !== "null") res[table[2]] += r.err;
+    return res;
+  }
+
+  // Returns { out (stdout), err, display (what a terminal shows), code }.
   function runScript(src, depth) {
-    src = expandSubstitutions(src, depth || 0);
-    var t = tokenize(src);
-    if (t.error) return { out: t.error + "\n", code: 2 };
+    depth = depth || 0;
+    var p = parse(src, depth);
+    if (p.error) return { out: "", err: p.error + "\n", display: p.error + "\n", code: 2 };
+    var b = build(p.tokens);
+    if (b.error) return { out: "", err: b.error + "\n", display: b.error + "\n", code: 2 };
 
-    // Build: list of { pipeline: [[words]], op } entries.
-    var list = [], pipeline = [], words = [], skipNext = false;
-    t.tokens.forEach(function (tok) {
-      if (tok.w !== undefined) { if (skipNext) { skipNext = false; return; } words.push(tok.w); return; }
-      if (tok.op === "redir") { skipNext = true; return; }                // ignore redirections & target
-      if (tok.op === "|") { pipeline.push(words); words = []; return; }
-      pipeline.push(words); words = [];
-      list.push({ pipeline: pipeline, op: tok.op }); pipeline = [];
-    });
-    pipeline.push(words);
-    list.push({ pipeline: pipeline, op: null });
-
-    var out = "", last = 0, prevOp = null;
-    for (var i = 0; i < list.length; i++) {
-      var entry = list[i];
-      var empty = entry.pipeline.every(function (w) { return !w.length; });
+    var out = "", err = "", display = "", last = 0, prevOp = null;
+    for (var i = 0; i < b.list.length; i++) {
+      var entry = b.list[i];
+      var empty = entry.pipeline.length === 1 && !entry.pipeline[0].words.length && !entry.pipeline[0].redirs.length;
       if (empty) {
-        if (entry.op && entry.op !== ";" ) return { out: out + "sh: 1: Syntax error: \"" + entry.op + "\" unexpected\n", code: 2 };
+        if (entry.op && entry.op !== ";") {
+          var se = 'sh: 1: Syntax error: "' + entry.op + '" unexpected\n';
+          return { out: out, err: err + se, display: display + se, code: 2 };
+        }
         prevOp = entry.op; continue;
       }
-      if (prevOp === "&&" && last !== 0) { prevOp = entry.op; continue; }
-      if (prevOp === "||" && last === 0) { prevOp = entry.op; continue; }
-      var stdin = "", res = { out: "", code: 0 };
+      if ((prevOp === "&&" && last !== 0) || (prevOp === "||" && last === 0)) { prevOp = entry.op; continue; }
+      var stdin = "", res = null;
       for (var j = 0; j < entry.pipeline.length; j++) {
-        var w = entry.pipeline[j];
-        if (!w.length) return { out: out + "sh: 1: Syntax error: \"|\" unexpected\n", code: 2 };
-        res = runCommand(w, stdin);
+        var cmd = entry.pipeline[j];
+        if (!cmd.words.length && !cmd.redirs.length) {
+          var pe = 'sh: 1: Syntax error: "|" unexpected\n';
+          return { out: out, err: err + pe, display: display + pe, code: 2 };
+        }
+        res = execSimple(cmd, stdin);
+        err += res.err; display += res.err;
         stdin = res.out;
       }
-      out += res.out;
+      out += res.out; display += res.out;
       last = res.code;
       prevOp = entry.op;
     }
-    return { out: out, code: last };
+    return { out: out, err: err, display: display, code: last };
   }
 
   /* ------------------------------------------------------------------
@@ -243,6 +337,7 @@
   function endpoint(host) {
     var level = M.getLevel();
     executed = [];
+    subErr = "";
     if (level === "medium") {
       for (var i = 0; i < BLOCKLIST.length; i++) {
         if (host.indexOf(BLOCKLIST[i]) !== -1) return { status: 400, cmd: null, out: "Invalid characters in host: \"" + BLOCKLIST[i] + "\"\n", code: 1 };
@@ -250,12 +345,12 @@
     }
     if (level === "high") {
       if (!HOST_RE.test(host)) return { status: 400, cmd: null, out: "Invalid host. Enter a hostname or IPv4 address.\n", code: 1 };
-      var r = ping(["-c", "2", host]);
-      return { status: r.code === 0 ? 200 : 502, cmd: ["ping", "-c", "2", host], out: r.out, code: r.code, argv: true };
+      var r = ping(["-c", "2", "--", host]);
+      return { status: r.code === 0 ? 200 : 502, cmd: ["ping", "-c", "2", "--", host], out: r.out, code: r.code, argv: true };
     }
     var cmd = "ping -c 2 " + host;
     var res = runScript(cmd);
-    return { status: 200, cmd: cmd, out: res.out, code: res.code };
+    return { status: 200, cmd: cmd, out: subErr + res.display, code: res.code };
   }
 
   function submit(host) {
@@ -264,7 +359,7 @@
     var term = $("#ci-term");
     var head;
     if (res.argv) {
-      head = '<span class="dim"># execFile("ping", ' + esc(JSON.stringify(res.cmd.slice(1))) + ")  (no shell)</span>\n";
+      head = '<span class="dim"># subprocess.run(' + esc(JSON.stringify(res.cmd).replace(/,/g, ", ")) + ")  (no shell)</span>\n";
     } else if (res.cmd) {
       head = '<span class="prompt">www-data@web01:/opt/app$</span> ping -c 2 <span class="inj">' + esc(host) + "</span>\n";
     } else {

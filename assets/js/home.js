@@ -1,7 +1,7 @@
 /*!
  * Modern Vulnerable Web Application — home page
  *
- * Renders the lab catalogue and progress from the shared registry in core.js.
+ * Renders the lab catalog and progress from the shared registry in core.js.
  */
 (function () {
   "use strict";

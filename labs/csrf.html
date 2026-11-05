@@ -131,9 +131,14 @@
             <div class="code-card"><div class="code-card-head"><span>High · secure</span><span>Node.js</span></div>
 <pre><code data-lang="js">res.cookie("session", sid, { secure: true, httpOnly: true, [[good]]sameSite: "lax"[[/good]] });
 
+// Constant-time comparison that never throws on missing or mismatched-length input
+const tokensMatch = (a, b) =&gt;
+  typeof a === "string" &amp;&amp; typeof b === "string" &amp;&amp; a.length === b.length &amp;&amp;
+  crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+
 app.post("/transfer", requireSession, (req, res) =&gt; {
   if ([[good]]req.get("Origin") !== "https://bank.harbor.test"[[/good]]) return res.sendStatus(403);
-  if ([[good]]!timingSafeEqual(req.body.csrf_token, req.session.csrfToken)[[/good]]) return res.sendStatus(403);
+  if ([[good]]!tokensMatch(req.body.csrf_token, req.session.csrfToken)[[/good]]) return res.sendStatus(403);
   transfer(req.user, req.body.to, Number(req.body.amount));
   res.redirect(303, "/accounts");
 });</code></pre></div>
@@ -148,7 +153,7 @@ app.post("/transfer", requireSession, (req, res) =&gt; {
           <p>Browsers attach a site's cookies to requests sent to that site, whichever page started the request. If a server identifies the user by cookie alone, it cannot tell a request the user meant to send from one forged by another site. The attacker never sees the response. They don't need to, because the state change (a transfer, an email change, a password reset) is the goal.</p>
           <h3>Impact</h3>
           <ul>
-            <li>Unauthorised fund transfers, purchases or account setting changes.</li>
+            <li>Unauthorized fund transfers, purchases or account setting changes.</li>
             <li>Account takeover by changing the account's email address or password.</li>
             <li>Admin actions performed through a privileged user's browser.</li>
           </ul>
@@ -157,7 +162,7 @@ app.post("/transfer", requireSession, (req, res) =&gt; {
           <h3>Remediation</h3>
           <ul>
             <li>Use a synchronizer token or a signed double-submit cookie on every state-changing request. Most frameworks ship this built in.</li>
-            <li>Set session cookies to <code>SameSite=Lax</code> or <code>Strict</code> as defence in depth.</li>
+            <li>Set session cookies to <code>SameSite=Lax</code> or <code>Strict</code> as defense in depth.</li>
             <li>Verify the <code>Origin</code> header (or <code>Sec-Fetch-Site</code>) against an exact allowlist.</li>
             <li>Never change state on GET. Ask for re-authentication before sensitive actions.</li>
           </ul>

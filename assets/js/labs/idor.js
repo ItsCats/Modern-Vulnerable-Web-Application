@@ -81,7 +81,6 @@
     if (res.status === 200 && res.meta && res.meta.owner !== ME) {
       if (res.meta.kind === "invoice") M.complete("idor-invoice");
       if (res.body.api_key === ADMIN_KEY) M.complete("idor-admin");
-      if (res.meta.kind === "user" && res.body.api_key !== ADMIN_KEY) M.complete("idor-invoice");
       if (level === "medium") M.complete("idor-medium");
     }
   }

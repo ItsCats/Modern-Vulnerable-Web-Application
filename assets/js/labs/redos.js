@@ -130,7 +130,9 @@
   function renderChart() {
     var host = $("#chart");
     var tip = $("#chart-tip");
-    var W = 720, H = 240, padL = 48, padR = 12, padT = 18, padB = 30;
+    // Draw at the container's real width so text stays 11px on phones.
+    var W = Math.max(300, Math.round(host.clientWidth || 720)), H = W < 480 ? 210 : 240;
+    var padL = 40, padR = 8, padT = 18, padB = 30;
     var iw = W - padL - padR, ih = H - padT - padB;
     var max = TIMEOUT_MS;
     var ticks = [0, 1000, 2000, 3000, 4000];
@@ -211,6 +213,14 @@
   });
 
   renderChart();
+  var resizeTimer = null, lastWidth = 0;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      var w = $("#chart").clientWidth;
+      if (w !== lastWidth) { lastWidth = w; renderChart(); }
+    }, 150);
+  });
 
   M.initLab({
     id: "redos",

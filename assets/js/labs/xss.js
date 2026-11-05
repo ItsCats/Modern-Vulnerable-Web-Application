@@ -37,15 +37,16 @@
    * Execution detection: intercept dialogs, and attribute each execution
    * to the injection point (data-sink) it came from.
    * ---------------------------------------------------------------- */
-  var lastRender = null;
-
+  // Attribute an execution to an injection point using the element that is
+  // running the code: the <script> being executed, or the target of the
+  // event whose inline handler fired (onerror, ontoggle, onclick, ...).
   function currentSink() {
+    if (M.getLevel() === "high") return null;
     var node = document.currentScript || (window.event && window.event.target);
     if (node && node.closest) {
       var s = node.closest("[data-sink]");
       if (s) return s.getAttribute("data-sink");
     }
-    if (lastRender && Date.now() - lastRender.t < 4000) return lastRender.sink;
     return null;
   }
 
@@ -97,7 +98,7 @@
   function captureExfil(method, url, body) {
     var line = '<span class="ok">' + esc(method) + "</span> " + esc(String(url)) + (body ? ' <span class="dim">body=</span>' + esc(String(body)) : "");
     appendLog("#exfil-log", '<span class="prompt">[' + esc(new Date().toLocaleTimeString()) + "]</span> " + line);
-    if (containsToken(url) || containsToken(body)) {
+    if (M.getLevel() !== "high" && (containsToken(url) || containsToken(body))) {
       M.complete("xss-cookie");
       M.toast("Session cookie stolen", "The victim's sessionid reached attacker.test.", "danger");
     }
@@ -123,6 +124,33 @@
       return realBeacon(url, data);
     };
   }
+  // XMLHttpRequest: requests to other hosts are captured and never sent.
+  var xhrOpen = XMLHttpRequest.prototype.open, xhrSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (method, url) {
+    this.__mvwa = isExternal(url) ? { method: String(method || "GET").toUpperCase(), url: String(url) } : null;
+    return xhrOpen.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.send = function (body) {
+    if (this.__mvwa) { captureExfil(this.__mvwa.method, this.__mvwa.url, body); return; }
+    return xhrSend.apply(this, arguments);
+  };
+
+  // WebSocket / EventSource / window.open: capture instead of connecting.
+  function inertStub(kind) {
+    return function (url) {
+      captureExfil(kind, url);
+      this.readyState = 3;
+      this.send = this.close = this.addEventListener = this.removeEventListener = function () {};
+    };
+  }
+  window.WebSocket = inertStub("WEBSOCKET");
+  window.EventSource = inertStub("EVENTSOURCE");
+  var realOpen = window.open;
+  window.open = function (url) {
+    if (url && isExternal(url)) { captureExfil("WINDOW.OPEN", url); return null; }
+    return realOpen.apply(window, arguments);
+  };
+
   var imgSrc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
   if (imgSrc && imgSrc.set) {
     Object.defineProperty(HTMLImageElement.prototype, "src", {
@@ -144,8 +172,7 @@
 
   // Inserts server-rendered HTML the way a browser would parse a response
   // (createContextualFragment executes <script> elements, unlike innerHTML).
-  function writeHtml(el, html, sink) {
-    lastRender = { sink: sink, t: Date.now() };
+  function writeHtml(el, html) {
     el.innerHTML = "";
     el.appendChild(document.createRange().createContextualFragment(html));
   }
@@ -167,7 +194,7 @@
       return;
     }
     var value = level === "medium" ? stripScripts(q) : q;
-    writeHtml(out, '<p style="margin:0">Results for "' + value + '"</p><p class="muted" style="margin:.35rem 0 0">No products matched your search.</p>', "reflected");
+    writeHtml(out, '<p style="margin:0">Results for "' + value + '"</p><p class="muted" style="margin:.35rem 0 0">No products matched your search.</p>');
   }
 
   function loadComments() { return M.store.get(STORE_KEY, null) || DEFAULT_COMMENTS.slice(); }
@@ -199,7 +226,7 @@
       var name = level === "medium" ? stripScripts(c.name) : c.name;
       return '<div class="comment"><div class="who">' + name + "<time>" + esc(new Date(c.t).toLocaleDateString()) + '</time></div><div class="body">' + body + "</div></div>";
     }).join("");
-    writeHtml(list, html, "stored");
+    writeHtml(list, html);
   }
 
   /* ------------------------------------------------------------------

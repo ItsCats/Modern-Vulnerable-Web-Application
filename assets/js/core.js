@@ -20,7 +20,7 @@
       id: "sql-injection",
       title: "SQL Injection",
       short: "SQLi",
-      owasp: "A03:2021 Injection",
+      owasp: "A05:2025 Injection",
       cwe: "CWE-89",
       severity: "Critical",
       summary:
@@ -36,7 +36,7 @@
       id: "xss",
       title: "Cross-Site Scripting",
       short: "XSS",
-      owasp: "A03:2021 Injection",
+      owasp: "A05:2025 Injection",
       cwe: "CWE-79",
       severity: "High",
       summary:
@@ -52,7 +52,7 @@
       id: "csrf",
       title: "Cross-Site Request Forgery",
       short: "CSRF",
-      owasp: "A01:2021 Broken Access Control",
+      owasp: "A01:2025 Broken Access Control",
       cwe: "CWE-352",
       severity: "High",
       summary:
@@ -67,7 +67,7 @@
       id: "idor",
       title: "Insecure Direct Object Reference",
       short: "IDOR",
-      owasp: "A01:2021 Broken Access Control",
+      owasp: "A01:2025 Broken Access Control",
       cwe: "CWE-639",
       severity: "High",
       summary:
@@ -82,7 +82,7 @@
       id: "path-traversal",
       title: "Path Traversal",
       short: "Traversal",
-      owasp: "A01:2021 Broken Access Control",
+      owasp: "A01:2025 Broken Access Control",
       cwe: "CWE-22",
       severity: "High",
       summary:
@@ -97,7 +97,7 @@
       id: "command-injection",
       title: "OS Command Injection",
       short: "Command Inj.",
-      owasp: "A03:2021 Injection",
+      owasp: "A05:2025 Injection",
       cwe: "CWE-78",
       severity: "Critical",
       summary:
@@ -112,7 +112,7 @@
       id: "redos",
       title: "Denial of Service (ReDoS)",
       short: "ReDoS",
-      owasp: "A04:2021 Insecure Design",
+      owasp: "A06:2025 Insecure Design",
       cwe: "CWE-1333",
       severity: "Medium",
       summary:
@@ -301,7 +301,7 @@
       '<span class="brand-mark">mv</span>' +
       '<span class="brand-name"><span>MVWA</span><small>Modern Vulnerable Web App</small></span></a>' +
       '<nav class="header-nav" aria-label="Primary">' +
-      '<a href="' + r + 'index.html#labs"' + (page === "lab" ? ' aria-current="page"' : "") + ">Labs</a>" +
+      '<a href="' + r + 'index.html#labs"' + (page === "lab" ? ' class="active"' : "") + ">Labs</a>" +
       '<a class="hide-sm" href="' + r + 'index.html#how-it-works">How it works</a>' +
       '<a class="hide-sm" href="' + r + 'index.html#about">About</a>' +
       '<a class="icon-btn" href="' + REPO_URL + '" target="_blank" rel="noopener" aria-label="Source code on GitHub" title="Source code on GitHub">' + ICONS.github + "</a>" +
@@ -408,23 +408,37 @@
   function renderObjectives(mod) {
     var mount = $("#objectives");
     if (!mount) return;
-    var stats = progress.moduleStats(mod);
     var items = mod.objectives.map(function (o) {
-      var done = progress.isDone(o.id);
-      return '<li class="objective' + (done ? " done" : "") + '" data-objective="' + o.id + '">' +
+      return '<li class="objective" data-objective="' + o.id + '">' +
         '<span class="check">' + ICONS.check + "</span>" +
-        '<span class="txt">' + escapeHtml(o.label) + "<small>" + escapeHtml(o.detail) + "</small></span></li>";
+        '<span class="txt">' + escapeHtml(o.label) + "<small>" + escapeHtml(o.detail) + "</small>" +
+        '<span class="sr-only" data-state></span></span></li>';
     }).join("");
     mount.innerHTML =
       '<div class="panel-head"><h2>Objectives</h2>' +
-      '<div class="progress-card" style="min-width:180px"><div class="progress-track"><div class="progress-fill" style="width:' +
-      (stats.done / stats.total * 100) + '%"></div></div><span class="progress-label">' + stats.done + " of " + stats.total + "</span>" +
+      '<div class="progress-card" style="min-width:180px"><div class="progress-track"><div class="progress-fill" id="objectives-fill"></div></div>' +
+      '<span class="progress-label" id="objectives-count" aria-live="polite"></span>' +
       '<button type="button" class="btn btn-ghost btn-sm" id="reset-objectives">Reset</button></div></div>' +
       '<div class="panel-body"><ul class="objectives">' + items + "</ul>" +
       (mod.hintsHtml || "") + "</div>";
     $("#reset-objectives").addEventListener("click", function () {
       progress.resetModule(mod);
       toast("Progress reset", mod.title + " objectives cleared.");
+    });
+    updateObjectives(mod);
+  }
+
+  function updateObjectives(mod) {
+    if (!$("#objectives-fill")) return;
+    var stats = progress.moduleStats(mod);
+    $("#objectives-fill").style.width = (stats.done / stats.total * 100) + "%";
+    $("#objectives-count").textContent = stats.done + " of " + stats.total;
+    mod.objectives.forEach(function (o) {
+      var li = $('[data-objective="' + o.id + '"]');
+      if (!li) return;
+      var done = progress.isDone(o.id);
+      li.classList.toggle("done", done);
+      $("[data-state]", li).textContent = done ? " (completed)" : " (not completed)";
     });
   }
 
@@ -441,7 +455,7 @@
     renderLevelControl();
     renderObjectives(mod);
     renderSidebar(mod.id);
-    progress.onChange(function () { renderObjectives(mod); renderSidebar(mod.id); });
+    progress.onChange(function () { updateObjectives(mod); renderSidebar(mod.id); });
     if (typeof opts.onLevel === "function") levelHandlers.push(opts.onLevel);
     applyLevel();
     return mod;
@@ -457,7 +471,7 @@
       var html = escapeHtml(src);
       var rules = [
         { re: /(\/\/[^\n]*|(?:^|\s)#\s[^\n]*)/gm, cls: "tok-c" },
-        { re: /(&#39;(?:[^&]|&(?!#39;))*?&#39;|&quot;(?:[^&]|&(?!quot;))*?&quot;|`[^`]*`)/g, cls: "tok-s" },
+        { re: /(&#39;(?:[^&\n]|&(?!#39;))*?&#39;|&quot;(?:[^&\n]|&(?!quot;))*?&quot;|`[^`\n]*`)/g, cls: "tok-s" },
         { re: /\b(const|let|var|function|return|if|else|await|async|new|throw|import|from|require|def|for|in|of|try|catch|SELECT|FROM|WHERE|AND|OR|LIKE|UNION|INSERT|UPDATE|DELETE)\b/g, cls: "tok-k" }
       ];
       // Tokenise in a single pass to avoid highlighting inside earlier matches.
