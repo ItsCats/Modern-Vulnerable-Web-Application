@@ -55,6 +55,23 @@ test.describe("SQL injection", () => {
     await expectDone(page, "sqli-login", false);
   });
 
+  test("Every hint's answer, filled in and sent, earns its objective", async ({ page }) => {
+    const hints = await page.evaluate(() =>
+      window.MVWA.getModule("sql-injection").hints.map((h) => ({ objective: h.objective, steps: h.steps.map((s) => s.send) })));
+    expect(hints.length).toBe(4);
+    for (let i = 0; i < hints.length; i++) {
+      const hint = page.locator("details.hint").nth(i);
+      await hint.locator(":scope > summary").click();
+      await hint.locator("details.hint-answer > summary").click();
+      for (let j = 0; j < hints[i].steps.length; j++) {
+        await hint.locator(".hint-try").nth(j).click();
+        await page.click(hints[i].steps[j]);
+      }
+      await expectDone(page, hints[i].objective);
+      await expect(hint).toHaveClass(/done/);
+    }
+  });
+
   test("Hints stay open when an objective completes", async ({ page }) => {
     await setLevel(page, "low");
     await page.click("details.hint summary");
