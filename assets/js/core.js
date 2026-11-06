@@ -440,6 +440,85 @@
       li.classList.toggle("done", done);
       $("[data-state]", li).textContent = done ? " (completed)" : " (not completed)";
     });
+    $$("details.hint[data-hint-objective]").forEach(function (d) {
+      d.classList.toggle("done", progress.isDone(d.getAttribute("data-hint-objective")));
+    });
+  }
+
+  /* ------------------------------------------------------------------------
+   * Layered hints: a nudge, then (on request) the exact input, what each part
+   * of it does, why it works, and a button that fills it into the lab.
+   *
+   * hint = { objective, title, level, nudge (html),
+   *          steps: [{ label?, code, fill: {selector: value}, send: selector }],
+   *          parts: [[piece, meaning (html)]], why (html) }
+   * --------------------------------------------------------------------- */
+  var LEVEL_NAME = { low: "Low", medium: "Medium", high: "High" };
+
+  function renderHints(hints) {
+    if (typeof hints === "string") return hints;
+    if (!hints || !hints.length) return "";
+    var html = '<div class="hints-intro"><h3>Stuck?</h3><p>Each hint starts with a nudge. ' +
+      "Open <strong>Show the answer</strong> for the exact input, what each part does and why it works.</p></div>";
+    hints.forEach(function (h, i) {
+      var lvl = h.level || "low";
+      html += '<details class="hint" data-hint-objective="' + escapeHtml(h.objective || "") + '">' +
+        '<summary><span class="hint-title">' + escapeHtml(h.title) + "</span>" +
+        '<span class="hint-solved">' + ICONS.check + "Solved</span>" +
+        '<span class="badge hint-level hint-' + lvl + '">' + LEVEL_NAME[lvl] + "</span></summary><div>" +
+        "<p>" + h.nudge + "</p>" +
+        '<details class="hint-answer"><summary>Still stuck? Show the answer</summary><div>';
+      (h.steps || []).forEach(function (st, j) {
+        if (st.label) html += '<p class="hint-step">' + st.label + "</p>";
+        html += '<pre class="hint-code"><code>' + escapeHtml(st.code) + "</code></pre>";
+        if (st.fill) {
+          html += '<button type="button" class="btn btn-secondary btn-sm hint-try" data-hint="' + i + '" data-step="' + j + '">' +
+            "Fill it in" + (lvl !== "low" ? " (switches to " + LEVEL_NAME[lvl] + ")" : "") + "</button>";
+        }
+      });
+      if (h.parts && h.parts.length) {
+        html += '<div class="table-wrap hint-parts"><table class="data"><thead><tr><th>Part</th><th>What it does</th></tr></thead><tbody>';
+        h.parts.forEach(function (pt) {
+          html += '<tr><td class="mono">' + escapeHtml(pt[0]) + "</td><td>" + pt[1] + "</td></tr>";
+        });
+        html += "</tbody></table></div>";
+      }
+      if (h.why) html += '<p class="hint-why"><strong>Why it works:</strong> ' + h.why + "</p>";
+      html += "</div></details></div></details>";
+    });
+    return html;
+  }
+
+  function setField(el, value) {
+    el.value = value;
+    el.dispatchEvent(new Event(el.tagName === "SELECT" ? "change" : "input", { bubbles: true }));
+  }
+
+  function wireHints(mod) {
+    var mount = $("#objectives");
+    if (!mount || !Array.isArray(mod.hints)) return;
+    mount.addEventListener("click", function (e) {
+      var btn = e.target.closest(".hint-try");
+      if (!btn) return;
+      var h = mod.hints[Number(btn.getAttribute("data-hint"))];
+      var st = h && h.steps[Number(btn.getAttribute("data-step"))];
+      if (!st) return;
+      var lvl = h.level || "low";
+      if (getLevel() !== lvl) setLevel(lvl);
+      var first = null;
+      Object.keys(st.fill).forEach(function (sel) {
+        var el = $(sel);
+        if (!el) return;
+        setField(el, st.fill[sel]);
+        if (!first && el.tagName !== "SELECT") first = el;
+      });
+      var send = st.send ? $(st.send) : null;
+      var target = send || first;
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (first) first.focus({ preventScroll: true });
+      var label = send ? (send.textContent || "").trim() : "";
+      toast("Filled in", "Security level is " + LEVEL_NAME[lvl] + "." + (label ? " Now press “" + label + "”." : ""));
+    });
   }
 
   /**
@@ -450,10 +529,12 @@
     var mod = getModule(opts.id);
     activeModule = mod;
     mod.levelText = opts.levels || {};
-    mod.hintsHtml = opts.hints || "";
+    mod.hints = opts.hints || [];
+    mod.hintsHtml = renderHints(mod.hints);
     renderLabHead(mod);
     renderLevelControl();
     renderObjectives(mod);
+    wireHints(mod);
     renderSidebar(mod.id);
     progress.onChange(function () { updateObjectives(mod); renderSidebar(mod.id); });
     if (typeof opts.onLevel === "function") levelHandlers.push(opts.onLevel);

