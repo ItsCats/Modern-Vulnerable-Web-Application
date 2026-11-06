@@ -1,0 +1,12 @@
+{
+  "name": "mvwa-tests",
+  "private": true,
+  "description": "End-to-end tests for the Modern Vulnerable Web Application labs",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

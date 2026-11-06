@@ -1,5 +1,11 @@
 # Modern Vulnerable Web Application (MVWA)
 
+[![End-to-end tests](https://github.com/ItsCats/Modern-Vulnerable-Web-Application/actions/workflows/tests.yml/badge.svg)](https://github.com/ItsCats/Modern-Vulnerable-Web-Application/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Live demo](https://img.shields.io/badge/demo-mvwa.netlify.app-0b7d6e.svg)](https://mvwa.netlify.app)
+
+**Live demo: [mvwa.netlify.app](https://mvwa.netlify.app)**
+
 An interactive, browser-based web security training lab. MVWA has seven hands-on labs covering the most common classes of web vulnerability. In each one you exploit a realistic simulated application, study the server-side code that made the attack possible, and then switch to a hardened implementation to see the same payload fail.
 
 Every lab has three security levels (**Vulnerable**, **Weak mitigation** and **Secure**) and is mapped to the OWASP Top 10:2025 and a CWE identifier. Everything runs client-side as static files: there is no server to deploy, nothing to install, and no data leaves the browser.
@@ -93,6 +99,8 @@ The repository deploys as-is to any static host (GitHub Pages, Netlify, Cloudfla
 │       ├── core.js             Lab registry, navigation, security levels, progress, toasts
 │       ├── home.js             Landing-page rendering
 │       └── labs/               One simulated back end per lab, plus a shared virtual file system
+├── tests/                      Playwright end-to-end suite (one spec per lab)
+├── .github/workflows/          CI: runs the suite on every push and pull request
 └── docs/                       Screenshots
 ```
 
@@ -102,9 +110,43 @@ The repository deploys as-is to any static host (GitHub Pages, Netlify, Cloudfla
 2. Create `labs/<id>.html` from an existing lab page. Mark level-specific content with `data-show-level="low|medium|high"`.
 3. Create `assets/js/labs/<id>.js`. Call `MVWA.initLab({ id, levels, hints, onLevel })`, read `MVWA.getLevel()` inside your simulated server, and call `MVWA.complete("<objective-id>")` when an objective is achieved.
 
+## Testing
+
+Every lab has an end-to-end spec in `tests/specs/`. For each security level, the specs check that:
+
+- each objective can actually be earned at its intended level;
+- the Medium mitigation blocks the naive payload while its known bypasses still work;
+- High blocks every payload, and the legitimate feature keeps working.
+
+Site-wide checks load every page, flag uncaught errors, and catch horizontal overflow on a 360px screen. GitHub Actions runs the suite on every push and pull request.
+
+To run the tests locally, which needs Node.js 18+ and Python 3:
+
+```bash
+cd tests
+```
+
+```bash
+npm ci
+```
+
+```bash
+npx playwright install chromium
+```
+
+```bash
+npx playwright test
+```
+
+The test runner starts a static server for the site automatically.
+
 ## Responsible use
 
 MVWA is intentionally insecure and exists for education. The techniques it teaches are illegal to use against systems you do not own or have explicit written permission to test. Everything in this project runs locally in your own browser, so practicing here harms no one.
+
+## License
+
+[MIT](LICENSE)
 
 ## Further reading
 
