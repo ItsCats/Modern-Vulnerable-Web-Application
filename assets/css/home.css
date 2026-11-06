@@ -136,6 +136,7 @@ main section[id] { scroll-margin-top: calc(var(--header-h) + 12px); }
 }
 .lab-card-extra .lab-card-foot { border-top-style: dashed; border-top-color: var(--border-strong); }
 .lab-card-extra:hover { background: var(--surface); }
+@media (min-width: 1061px) { .lab-card-extra { grid-column: span 2; } }
 
 /* ---------- How it works ---------- */
 ol.steps { list-style: none; padding: 0; margin: 0; counter-reset: none; }

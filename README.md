@@ -6,7 +6,7 @@
 
 **Live demo: [mvwa.netlify.app](https://mvwa.netlify.app)**
 
-An interactive, browser-based web security training lab. MVWA has nine hands-on labs covering the most common classes of web vulnerability. In each one you exploit a realistic simulated application, study the server-side code that made the attack possible, and then switch to a hardened implementation to see the same payload fail.
+An interactive, browser-based web security training lab. MVWA has seven hands-on labs covering the most common classes of web vulnerability. In each one you exploit a realistic simulated application, study the server-side code that made the attack possible, and then switch to a hardened implementation to see the same payload fail.
 
 Every lab has three security levels (**Vulnerable**, **Weak mitigation** and **Secure**) and is mapped to the OWASP Top 10:2025 and a CWE identifier. Everything runs client-side as static files: there is no server to deploy, nothing to install, and no data leaves the browser.
 
@@ -23,12 +23,10 @@ Every lab has three security levels (**Vulnerable**, **Weak mitigation** and **S
 | 05 | Path Traversal | A01 Broken Access Control | [CWE-22](https://cwe.mitre.org/data/definitions/22.html) | Escaping a download directory, then bypassing `../` stripping and double-decoding bugs |
 | 06 | OS Command Injection | A05 Injection | [CWE-78](https://cwe.mitre.org/data/definitions/78.html) | Injecting into a `ping` utility through a simulated POSIX shell (separators, pipes, `$(…)`, backticks) |
 | 07 | Denial of Service (ReDoS) | A06 Insecure Design\* | [CWE-1333](https://cwe.mitre.org/data/definitions/1333.html) | Catastrophic regex backtracking, with the exponential blow-up measured and charted live |
-| 08 | Server-Side Request Forgery | A01 Broken Access Control | [CWE-918](https://cwe.mitre.org/data/definitions/918.html) | Pivoting through a URL-fetching feature to internal services and the cloud metadata endpoint, past a hostname blocklist |
-| 09 | Open Redirect | A01 Broken Access Control | [CWE-601](https://cwe.mitre.org/data/definitions/601.html) | Abusing a login return URL for phishing, escalating to `javascript:` execution and beating a naive same-site check |
 
 \* CWE-1333 is not in OWASP's official CWE list for any 2025 category. Filing it under Insecure Design is this project's own editorial choice.
 
-Across the nine labs there are 29 objectives in total. Each is detected automatically when you achieve it, and your progress is saved locally in your browser.
+Across the seven labs there are 23 objectives in total. Each is detected automatically when you achieve it, and your progress is saved locally in your browser.
 
 ![SQL injection lab](docs/sql-injection-lab.png)
 
@@ -92,9 +90,7 @@ The repository deploys as-is to any static host (GitHub Pages, Netlify, Cloudfla
 │   ├── idor.html
 │   ├── path-traversal.html
 │   ├── command-injection.html
-│   ├── redos.html
-│   ├── ssrf.html
-│   └── open-redirect.html
+│   └── redos.html
 ├── assets/
 │   ├── css/
 │   │   ├── styles.css          Design system: tokens, light/dark themes, components

@@ -122,36 +122,6 @@
         { id: "dos-timeout", label: "Make a request time out entirely", detail: "Service outage" },
         { id: "dos-medium", label: "Still cause a 1 second stall under Medium's length limit", detail: "Insufficient mitigation" }
       ]
-    },
-    {
-      id: "ssrf",
-      title: "Server-Side Request Forgery",
-      short: "SSRF",
-      owasp: "A01:2025 Broken Access Control",
-      cwe: "CWE-918",
-      severity: "Critical",
-      summary:
-        "Turn a link-preview feature into a proxy for the internal network, and steal cloud credentials from the metadata service.",
-      objectives: [
-        { id: "ssrf-internal", label: "Reach the internal admin panel on localhost", detail: "Internal service access" },
-        { id: "ssrf-metadata", label: "Steal IAM credentials from the cloud metadata service", detail: "Cloud credential theft" },
-        { id: "ssrf-medium", label: "Bypass the hostname blocklist on Medium", detail: "Filter evasion" }
-      ]
-    },
-    {
-      id: "open-redirect",
-      title: "Open Redirect",
-      short: "Redirect",
-      owasp: "A01:2025 Broken Access Control",
-      cwe: "CWE-601",
-      severity: "Medium",
-      summary:
-        "Abuse a login page's return-URL parameter to send users to a phishing site, then escalate it to script execution.",
-      objectives: [
-        { id: "or-redirect", label: "Send a user to attacker.test after they sign in", detail: "Phishing via a trusted link" },
-        { id: "or-xss", label: "Escalate the redirect to script execution with a javascript: URL", detail: "DOM-based XSS" },
-        { id: "or-medium", label: "Bypass the same-site check on Medium", detail: "URL parsing confusion" }
-      ]
     }
   ];
 
